@@ -31,6 +31,10 @@ export interface Todo {
   assignerEmail: string;
   assigneeName: string;
   assigneeEmail: string;
+  projectId: number;
+  projectName: string;
+  projectDescription?: string;
+  projectIcon?: string;
   completed: boolean;
   priority: 'low' | 'medium' | 'high';
   isFavorite: boolean;
@@ -53,6 +57,7 @@ export interface CreateTodoInput {
   title: string;
   description: string;
   assigneeId: number;
+  projectId: number;
   priority?: 'low' | 'medium' | 'high';
   dueDate?: string;
 }
@@ -61,6 +66,7 @@ export interface UpdateTodoInput {
   title?: string;
   description?: string;
   assigneeId?: number;
+  projectId?: number;
   completed?: boolean;
   priority?: 'low' | 'medium' | 'high';
   isFavorite?: boolean;
@@ -96,6 +102,27 @@ export interface Setting {
   key: string;
   value: any;
   updatedAt: string;
+}
+
+export interface Project {
+  id: number;
+  name: string;
+  description?: string;
+  icon?: string;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface CreateProjectInput {
+  name: string;
+  description?: string;
+  icon?: string;
+}
+
+export interface UpdateProjectInput {
+  name?: string;
+  description?: string;
+  icon?: string;
 }
 
 export interface AuthContextType {

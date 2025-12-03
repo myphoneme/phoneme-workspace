@@ -3,6 +3,7 @@ import type { Todo } from '../types';
 import { useUpdateTodo, useDeleteTodo } from '../hooks/useTodos';
 import { useActiveUsers } from '../hooks/useUsers';
 import { useAuth } from '../contexts/AuthContext';
+import { useProjects } from '../hooks/useProjects';
 import { Comments } from './Comments';
 
 interface TodoItemProps {
@@ -16,10 +17,12 @@ export const TodoItem = ({ todo }: TodoItemProps) => {
   const [title, setTitle] = useState(todo.title);
   const [description, setDescription] = useState(todo.description);
   const [assigneeId, setAssigneeId] = useState(todo.assigneeId);
+  const [projectId, setProjectId] = useState(todo.projectId);
 
   const updateTodo = useUpdateTodo();
   const deleteTodo = useDeleteTodo();
   const { data: users } = useActiveUsers();
+  const { data: projects } = useProjects();
 
   // Check if current user can edit this task
   const isOwner = user?.id === todo.assignerId;
@@ -39,7 +42,7 @@ export const TodoItem = ({ todo }: TodoItemProps) => {
     updateTodo.mutate(
       {
         id: todo.id,
-        data: { title, description, assigneeId },
+        data: { title, description, assigneeId, projectId },
       },
       {
         onSuccess: () => {
@@ -53,6 +56,7 @@ export const TodoItem = ({ todo }: TodoItemProps) => {
     setTitle(todo.title);
     setDescription(todo.description);
     setAssigneeId(todo.assigneeId);
+    setProjectId(todo.projectId);
     setIsEditing(false);
   };
 
@@ -92,6 +96,17 @@ export const TodoItem = ({ todo }: TodoItemProps) => {
               <option key={u.id} value={u.id}>
                 {u.name} ({u.email})
               </option>
+              ))}
+          </select>
+          <select
+            value={projectId}
+            onChange={(e) => setProjectId(Number(e.target.value))}
+            className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
+          >
+            {projects?.map((project) => (
+              <option key={project.id} value={project.id}>
+                {project.name}
+              </option>
             ))}
           </select>
           <div className="flex gap-2">
@@ -128,6 +143,12 @@ export const TodoItem = ({ todo }: TodoItemProps) => {
                 >
                   {todo.title}
                 </h3>
+                <div className="mt-1 flex items-center gap-2 text-sm">
+                  <span className="px-2 py-0.5 rounded-full bg-blue-50 text-blue-700 border border-blue-100">
+                    {todo.projectIcon ? `${todo.projectIcon} ` : ''}
+                    {todo.projectName}
+                  </span>
+                </div>
                 <p
                   className={`text-gray-600 mt-1 ${
                     todo.completed ? 'line-through' : ''

@@ -1,6 +1,7 @@
 import { useState, useMemo } from 'react';
 import { useTodos } from '../hooks/useTodos';
 import { useAuth } from '../contexts/AuthContext';
+import { useProjects } from '../hooks/useProjects';
 import { TaskCard } from './TaskCard';
 import { AddTaskModal } from './AddTaskModal';
 
@@ -10,10 +11,12 @@ type SortType = 'newest' | 'oldest' | 'priority' | 'title';
 export function TaskManager() {
   const { user } = useAuth();
   const { data: todos, isLoading, error } = useTodos();
+  const { data: projects } = useProjects();
   const [searchQuery, setSearchQuery] = useState('');
   const [filter, setFilter] = useState<FilterType>('all');
   const [sortBy, setSortBy] = useState<SortType>('newest');
   const [showAddModal, setShowAddModal] = useState(false);
+  const [projectFilter, setProjectFilter] = useState<number | 'all'>('all');
 
   const filteredAndSortedTodos = useMemo(() => {
     if (!todos) return [];
@@ -30,6 +33,11 @@ export function TaskManager() {
           todo.assigneeName.toLowerCase().includes(query) ||
           todo.assignerName.toLowerCase().includes(query)
       );
+    }
+
+    // Apply project filter
+    if (projectFilter !== 'all') {
+      result = result.filter((todo) => todo.projectId === projectFilter);
     }
 
     // Apply category filter
@@ -70,7 +78,7 @@ export function TaskManager() {
     });
 
     return result;
-  }, [todos, searchQuery, filter, sortBy, user?.id]);
+  }, [todos, searchQuery, filter, sortBy, user?.id, projectFilter]);
 
   const stats = useMemo(() => {
     if (!todos) return { total: 0, completed: 0, pending: 0, favorites: 0 };
@@ -112,6 +120,23 @@ export function TaskManager() {
                   className="pl-9 pr-4 py-2 w-64 bg-gray-100 border-0 rounded-lg text-sm focus:ring-2 focus:ring-orange-500 focus:bg-white transition-all"
                 />
               </div>
+
+              {/* Project filter */}
+              <select
+                value={projectFilter}
+                onChange={(e) => {
+                  const val = e.target.value;
+                  setProjectFilter(val === 'all' ? 'all' : Number(val));
+                }}
+                className="py-2 px-3 bg-gray-100 border-0 rounded-lg text-sm focus:ring-2 focus:ring-orange-500 focus:bg-white transition-all"
+              >
+                <option value="all">All projects</option>
+                {projects?.map((project) => (
+                  <option key={project.id} value={project.id}>
+                    {project.name}
+                  </option>
+                ))}
+              </select>
 
               {/* View Toggle */}
               <button className="p-2 text-gray-500 hover:text-gray-700 hover:bg-gray-100 rounded-lg transition-colors">

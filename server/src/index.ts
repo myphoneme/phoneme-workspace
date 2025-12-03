@@ -9,6 +9,7 @@ import todosRouter from './routes/todos';
 import commentsRouter from './routes/comments';
 import notificationsRouter from './routes/notifications';
 import aiRouter from './routes/ai';
+import projectsRouter from './routes/projects';
 
 const app = express();
 const PORT = process.env.PORT || 3001;
@@ -29,6 +30,7 @@ app.use('/api/todos', todosRouter);
 app.use('/api/comments', commentsRouter);
 app.use('/api/notifications', notificationsRouter);
 app.use('/api/ai', aiRouter);
+app.use('/api/projects', projectsRouter);
 
 // Health check
 app.get('/health', (req, res) => {

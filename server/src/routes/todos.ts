@@ -17,10 +17,14 @@ router.get('/', (req: Request, res: Response): void => {
         assigner.name as assignerName,
         assigner.email as assignerEmail,
         assignee.name as assigneeName,
-        assignee.email as assigneeEmail
+        assignee.email as assigneeEmail,
+        p.name as projectName,
+        p.description as projectDescription,
+        p.icon as projectIcon
       FROM todos t
       JOIN users assigner ON t.assignerId = assigner.id
       JOIN users assignee ON t.assigneeId = assignee.id
+      JOIN projects p ON t.projectId = p.id
       ORDER BY t.createdAt DESC
     `).all() as any[];
 
@@ -46,10 +50,14 @@ router.get('/:id', (req: Request, res: Response): void => {
         assigner.name as assignerName,
         assigner.email as assignerEmail,
         assignee.name as assigneeName,
-        assignee.email as assigneeEmail
+        assignee.email as assigneeEmail,
+        p.name as projectName,
+        p.description as projectDescription,
+        p.icon as projectIcon
       FROM todos t
       JOIN users assigner ON t.assignerId = assigner.id
       JOIN users assignee ON t.assigneeId = assignee.id
+      JOIN projects p ON t.projectId = p.id
       WHERE t.id = ?
     `).get(req.params.id) as any;
 
@@ -67,8 +75,9 @@ router.get('/:id', (req: Request, res: Response): void => {
 // Create new todo
 router.post('/', (req: Request, res: Response): void => {
   try {
-    const { title, description, assigneeId, priority, dueDate }: CreateTodoInput = req.body;
+    const { title, description, assigneeId, priority, dueDate, projectId }: CreateTodoInput = req.body;
     const assignerId = req.user!.userId;
+    const normalizedProjectId = projectId !== undefined ? Number(projectId) : undefined;
 
     if (!title || !description || !assigneeId) {
       res.status(400).json({ error: 'Title, description, and assignee are required' });
@@ -82,10 +91,23 @@ router.post('/', (req: Request, res: Response): void => {
       return;
     }
 
+    // Validate project
+    const targetProjectId = normalizedProjectId ?? (db.prepare('SELECT id FROM projects WHERE name = ?').get('Office Tasks') as { id: number } | undefined)?.id;
+    if (!targetProjectId) {
+      res.status(400).json({ error: 'Project is required' });
+      return;
+    }
+
+    const projectExists = db.prepare('SELECT id FROM projects WHERE id = ?').get(targetProjectId);
+    if (!projectExists) {
+      res.status(400).json({ error: 'Invalid project selection' });
+      return;
+    }
+
     const result = db.prepare(`
-      INSERT INTO todos (title, description, assignerId, assigneeId, priority, dueDate)
-      VALUES (?, ?, ?, ?, ?, ?)
-    `).run(title, description, assignerId, assigneeId, priority || 'medium', dueDate || null);
+      INSERT INTO todos (title, description, assignerId, assigneeId, projectId, priority, dueDate)
+      VALUES (?, ?, ?, ?, ?, ?, ?)
+    `).run(title, description, assignerId, assigneeId, targetProjectId, priority || 'medium', dueDate || null);
 
     const newTodo = db.prepare(`
       SELECT
@@ -93,10 +115,14 @@ router.post('/', (req: Request, res: Response): void => {
         assigner.name as assignerName,
         assigner.email as assignerEmail,
         assignee.name as assigneeName,
-        assignee.email as assigneeEmail
+        assignee.email as assigneeEmail,
+        p.name as projectName,
+        p.description as projectDescription,
+        p.icon as projectIcon
       FROM todos t
       JOIN users assigner ON t.assignerId = assigner.id
       JOIN users assignee ON t.assigneeId = assignee.id
+      JOIN projects p ON t.projectId = p.id
       WHERE t.id = ?
     `).get(result.lastInsertRowid) as any;
 
@@ -110,8 +136,9 @@ router.post('/', (req: Request, res: Response): void => {
 // Update todo
 router.put('/:id', (req: Request, res: Response): void => {
   try {
-    const { title, description, assigneeId, completed, priority, isFavorite, dueDate }: UpdateTodoInput = req.body;
+    const { title, description, assigneeId, completed, priority, isFavorite, dueDate, projectId }: UpdateTodoInput = req.body;
     const todoId = req.params.id;
+    const normalizedProjectId = projectId !== undefined ? Number(projectId) : undefined;
 
     const todo = db.prepare('SELECT * FROM todos WHERE id = ?').get(todoId);
     if (!todo) {
@@ -142,6 +169,15 @@ router.put('/:id', (req: Request, res: Response): void => {
     if (assigneeId !== undefined) {
       updates.push('assigneeId = ?');
       values.push(assigneeId);
+    }
+    if (normalizedProjectId !== undefined) {
+      const projectExists = db.prepare('SELECT id FROM projects WHERE id = ?').get(normalizedProjectId);
+      if (!projectExists) {
+        res.status(400).json({ error: 'Invalid project selection' });
+        return;
+      }
+      updates.push('projectId = ?');
+      values.push(normalizedProjectId);
     }
     if (completed !== undefined) {
       updates.push('completed = ?');
@@ -180,10 +216,14 @@ router.put('/:id', (req: Request, res: Response): void => {
         assigner.name as assignerName,
         assigner.email as assignerEmail,
         assignee.name as assigneeName,
-        assignee.email as assigneeEmail
+        assignee.email as assigneeEmail,
+        p.name as projectName,
+        p.description as projectDescription,
+        p.icon as projectIcon
       FROM todos t
       JOIN users assigner ON t.assignerId = assigner.id
       JOIN users assignee ON t.assigneeId = assignee.id
+      JOIN projects p ON t.projectId = p.id
       WHERE t.id = ?
     `).get(todoId) as any;
 

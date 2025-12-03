@@ -1,30 +1,34 @@
 import { useState } from 'react';
 import { useCreateTodo } from '../hooks/useTodos';
 import { useActiveUsers } from '../hooks/useUsers';
+import { useProjects } from '../hooks/useProjects';
 
 export const TodoForm = () => {
   const [title, setTitle] = useState('');
   const [description, setDescription] = useState('');
   const [assigneeId, setAssigneeId] = useState<number | ''>('');
+  const [projectId, setProjectId] = useState<number | ''>('');
 
   const createTodo = useCreateTodo();
   const { data: users, isLoading: usersLoading } = useActiveUsers();
+  const { data: projects, isLoading: projectsLoading } = useProjects();
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
 
-    if (!title || !description || !assigneeId) {
+    if (!title || !description || !assigneeId || !projectId) {
       alert('Please fill in all fields');
       return;
     }
 
     createTodo.mutate(
-      { title, description, assigneeId: Number(assigneeId) },
+      { title, description, assigneeId: Number(assigneeId), projectId: Number(projectId) },
       {
         onSuccess: () => {
           setTitle('');
           setDescription('');
           setAssigneeId('');
+          setProjectId('');
         },
       }
     );
@@ -77,6 +81,26 @@ export const TodoForm = () => {
           {users?.map((user) => (
             <option key={user.id} value={user.id}>
               {user.name} ({user.email})
+            </option>
+          ))}
+        </select>
+      </div>
+
+      <div className="mb-4">
+        <label htmlFor="project" className="block text-sm font-medium text-gray-700 mb-1">
+          Project
+        </label>
+        <select
+          id="project"
+          value={projectId}
+          onChange={(e) => setProjectId(e.target.value ? Number(e.target.value) : '')}
+          className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
+          disabled={projectsLoading}
+        >
+          <option value="">Select a project</option>
+          {projects?.map((project) => (
+            <option key={project.id} value={project.id}>
+              {project.name}
             </option>
           ))}
         </select>

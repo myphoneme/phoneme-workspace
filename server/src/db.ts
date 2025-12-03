@@ -25,6 +25,15 @@ db.exec(`
     updatedAt TEXT DEFAULT (datetime('now'))
   );
 
+  CREATE TABLE IF NOT EXISTS projects (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    name TEXT UNIQUE NOT NULL,
+    description TEXT,
+    icon TEXT,
+    createdAt TEXT DEFAULT (datetime('now')),
+    updatedAt TEXT DEFAULT (datetime('now'))
+  );
+
   CREATE TABLE IF NOT EXISTS notifications (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
     userId INTEGER NOT NULL,
@@ -51,11 +60,13 @@ db.exec(`
     description TEXT NOT NULL,
     assignerId INTEGER NOT NULL,
     assigneeId INTEGER NOT NULL,
+    projectId INTEGER NOT NULL,
     completed INTEGER DEFAULT 0,
     priority TEXT DEFAULT 'medium' CHECK(priority IN ('low', 'medium', 'high')),
     isFavorite INTEGER DEFAULT 0,
     createdAt TEXT DEFAULT (datetime('now')),
     updatedAt TEXT DEFAULT (datetime('now')),
+    FOREIGN KEY (projectId) REFERENCES projects(id),
     FOREIGN KEY (assignerId) REFERENCES users(id),
     FOREIGN KEY (assigneeId) REFERENCES users(id)
   );
@@ -75,6 +86,17 @@ db.exec(`
   CREATE INDEX IF NOT EXISTS idx_todos_assigneeId ON todos(assigneeId);
   CREATE INDEX IF NOT EXISTS idx_users_email ON users(email);
 `);
+
+// Ensure default Office Tasks project exists
+const defaultProject = db.prepare('SELECT id FROM projects WHERE name = ?').get('Office Tasks') as { id: number } | undefined;
+const officeProjectId = defaultProject
+  ? defaultProject.id
+  : Number(
+      db
+        .prepare('INSERT INTO projects (name, description, icon) VALUES (?, ?, ?)')
+        .run('Office Tasks', 'General office and admin tasks', 'briefcase')
+        .lastInsertRowid
+    );
 
 // Migration: Add new columns to users table if they don't exist
 const userColumns = db.prepare("PRAGMA table_info(users)").all() as Array<{ name: string }>;
@@ -108,6 +130,15 @@ if (!todoColumnNames.includes('dueDate')) {
   db.exec('ALTER TABLE todos ADD COLUMN dueDate TEXT');
   console.log('Added dueDate column to todos table');
 }
+
+if (!todoColumnNames.includes('projectId')) {
+  db.exec(`ALTER TABLE todos ADD COLUMN projectId INTEGER DEFAULT ${officeProjectId}`);
+  db.prepare('UPDATE todos SET projectId = ? WHERE projectId IS NULL').run(officeProjectId);
+  console.log('Added projectId column to todos table');
+}
+
+// Ensure project index exists once column is present
+db.exec('CREATE INDEX IF NOT EXISTS idx_todos_projectId ON todos(projectId)');
 
 // Seed default admin user if no users exist
 const userCount = db.prepare('SELECT COUNT(*) as count FROM users').get() as { count: number };

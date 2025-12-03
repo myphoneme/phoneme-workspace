@@ -3,6 +3,7 @@ import type { Todo } from '../types';
 import { useUpdateTodo, useDeleteTodo } from '../hooks/useTodos';
 import { useActiveUsers } from '../hooks/useUsers';
 import { useAuth } from '../contexts/AuthContext';
+import { useProjects } from '../hooks/useProjects';
 import { Comments } from './Comments';
 import {
   timeAgo,
@@ -31,10 +32,12 @@ export function TaskCard({ todo }: TaskCardProps) {
   const [description, setDescription] = useState(todo.description);
   const [assigneeId, setAssigneeId] = useState(todo.assigneeId);
   const [priority, setPriority] = useState(todo.priority);
+  const [projectId, setProjectId] = useState(todo.projectId);
 
   const updateTodo = useUpdateTodo();
   const deleteTodo = useDeleteTodo();
   const { data: users } = useActiveUsers();
+  const { data: projects } = useProjects();
 
   const isOwner = user?.id === todo.assignerId;
   const isAssignee = user?.id === todo.assigneeId;
@@ -72,7 +75,7 @@ export function TaskCard({ todo }: TaskCardProps) {
     updateTodo.mutate(
       {
         id: todo.id,
-        data: { title, description, assigneeId, priority },
+        data: { title, description, assigneeId, priority, projectId },
       },
       {
         onSuccess: () => setIsEditing(false),
@@ -85,6 +88,7 @@ export function TaskCard({ todo }: TaskCardProps) {
     setDescription(todo.description);
     setAssigneeId(todo.assigneeId);
     setPriority(todo.priority);
+    setProjectId(todo.projectId);
     setIsEditing(false);
   };
 
@@ -161,6 +165,17 @@ export function TaskCard({ todo }: TaskCardProps) {
               <option value="high">High Priority</option>
             </select>
           </div>
+          <select
+            value={projectId}
+            onChange={(e) => setProjectId(Number(e.target.value))}
+            className="px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-orange-500 focus:border-orange-500"
+          >
+            {projects?.map((project) => (
+              <option key={project.id} value={project.id}>
+                {project.name}
+              </option>
+            ))}
+          </select>
           <div className="flex justify-end gap-2 pt-2">
             <button
               onClick={handleCancel}
@@ -224,6 +239,10 @@ export function TaskCard({ todo }: TaskCardProps) {
                 >
                   {todo.title}
                 </h3>
+                <span className="px-2 py-0.5 text-xs font-medium rounded-full bg-blue-50 text-blue-700 border border-blue-100">
+                  {todo.projectIcon ? `${todo.projectIcon} ` : ''}
+                  {todo.projectName}
+                </span>
 
                 {/* Status Badge */}
                 {todo.completed ? (

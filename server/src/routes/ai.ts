@@ -201,14 +201,21 @@ function executeCreateTask(userId: number, args: { title: string; description?: 
     assigneeId = assignee.id;
   }
 
+  const defaultProject = db.prepare('SELECT id FROM projects WHERE name = ?').get('Office Tasks') as { id: number } | undefined;
+  const projectId = defaultProject?.id;
+  if (!projectId) {
+    return { error: 'Default project not configured' };
+  }
+
   const result = db.prepare(`
-    INSERT INTO todos (title, description, assignerId, assigneeId, priority, dueDate)
-    VALUES (?, ?, ?, ?, ?, ?)
+    INSERT INTO todos (title, description, assignerId, assigneeId, projectId, priority, dueDate)
+    VALUES (?, ?, ?, ?, ?, ?, ?)
   `).run(
     args.title,
     args.description || '',
     userId,
     assigneeId,
+    projectId,
     args.priority || 'medium',
     args.due_date || null
   );
@@ -249,7 +256,7 @@ function executeCompleteTask(userId: number, args: { task_id?: number; task_titl
     return { message: 'Task is already completed' };
   }
 
-  db.prepare('UPDATE todos SET completed = 1, updatedAt = datetime("now") WHERE id = ?').run(task.id);
+  db.prepare("UPDATE todos SET completed = 1, updatedAt = datetime('now') WHERE id = ?").run(task.id);
 
   return {
     success: true,

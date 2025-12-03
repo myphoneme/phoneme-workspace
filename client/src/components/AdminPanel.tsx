@@ -1,14 +1,15 @@
-import { useState } from 'react';
+import { useState, FormEvent } from 'react';
 import { useUsers, useUpdateUser } from '../hooks/useUsers';
 import { useSetting, useUpdateSetting } from '../hooks/useSettings';
-import type { User } from '../types';
+import { useProjects, useCreateProject, useUpdateProject } from '../hooks/useProjects';
+import type { User, Project } from '../types';
 
 interface AdminPanelProps {
   onBack: () => void;
 }
 
 export function AdminPanel({ onBack }: AdminPanelProps) {
-  const [activeTab, setActiveTab] = useState<'users' | 'settings'>('users');
+  const [activeTab, setActiveTab] = useState<'users' | 'projects' | 'settings'>('users');
 
   return (
     <div className="min-h-screen bg-gray-50">
@@ -57,6 +58,16 @@ export function AdminPanel({ onBack }: AdminPanelProps) {
                 Users
               </button>
               <button
+                onClick={() => setActiveTab('projects')}
+                className={`px-6 py-4 font-medium transition-colors ${
+                  activeTab === 'projects'
+                    ? 'text-orange-600 border-b-2 border-orange-500'
+                    : 'text-gray-500 hover:text-gray-700'
+                }`}
+              >
+                Projects
+              </button>
+              <button
                 onClick={() => setActiveTab('settings')}
                 className={`px-6 py-4 font-medium transition-colors ${
                   activeTab === 'settings'
@@ -70,7 +81,7 @@ export function AdminPanel({ onBack }: AdminPanelProps) {
           </div>
 
           <div className="p-6">
-            {activeTab === 'users' ? <UsersTab /> : <SettingsTab />}
+            {activeTab === 'users' ? <UsersTab /> : activeTab === 'projects' ? <ProjectsTab /> : <SettingsTab />}
           </div>
         </div>
       </div>
@@ -249,6 +260,196 @@ function UsersTab() {
           </table>
         </div>
       )}
+    </div>
+  );
+}
+
+function ProjectsTab() {
+  const { data: projects, isLoading } = useProjects();
+  const createProject = useCreateProject();
+  const updateProject = useUpdateProject();
+  const [newProject, setNewProject] = useState({ name: '', description: '', icon: '' });
+  const [editingProject, setEditingProject] = useState<Project | null>(null);
+  const [editValues, setEditValues] = useState({ name: '', description: '', icon: '' });
+
+  const handleCreate = (e: FormEvent) => {
+    e.preventDefault();
+    if (!newProject.name.trim()) {
+      alert('Project name is required');
+      return;
+    }
+    createProject.mutate(
+      {
+        name: newProject.name.trim(),
+        description: newProject.description.trim() || undefined,
+        icon: newProject.icon.trim() || undefined,
+      },
+      {
+        onSuccess: () => setNewProject({ name: '', description: '', icon: '' }),
+      }
+    );
+  };
+
+  const startEdit = (project: Project) => {
+    setEditingProject(project);
+    setEditValues({
+      name: project.name,
+      description: project.description || '',
+      icon: project.icon || '',
+    });
+  };
+
+  const handleUpdate = (projectId: number) => {
+    updateProject.mutate(
+      {
+        id: projectId,
+        data: {
+          name: editValues.name.trim(),
+          description: editValues.description.trim() || undefined,
+          icon: editValues.icon.trim() || undefined,
+        },
+      },
+      { onSuccess: () => setEditingProject(null) }
+    );
+  };
+
+  if (isLoading) {
+    return (
+      <div className="flex items-center justify-center py-12">
+        <div className="w-8 h-8 border-4 border-orange-500 border-t-transparent rounded-full animate-spin"></div>
+      </div>
+    );
+  }
+
+  return (
+    <div className="space-y-6">
+      <div>
+        <h2 className="text-xl font-semibold text-gray-900">Project Management</h2>
+        <p className="text-sm text-gray-500 mt-1">
+          Organize tasks under Projects. &quot;Office Tasks&quot; is the default workspace for general work.
+        </p>
+      </div>
+
+      <form onSubmit={handleCreate} className="bg-gray-50 p-5 rounded-xl border border-gray-200 space-y-4">
+        <div className="flex flex-col md:flex-row gap-4">
+          <div className="flex-1">
+            <label className="block text-sm font-medium text-gray-700 mb-1">Project name</label>
+            <input
+              type="text"
+              value={newProject.name}
+              onChange={(e) => setNewProject({ ...newProject, name: e.target.value })}
+              placeholder="e.g., Website Redesign"
+              className="w-full px-4 py-2.5 border border-gray-300 rounded-lg focus:ring-2 focus:ring-orange-500 focus:border-orange-500"
+            />
+          </div>
+          <div className="w-full md:w-52">
+            <label className="block text-sm font-medium text-gray-700 mb-1">Icon (emoji or short label)</label>
+            <input
+              type="text"
+              value={newProject.icon}
+              onChange={(e) => setNewProject({ ...newProject, icon: e.target.value })}
+              placeholder="🚀"
+              className="w-full px-4 py-2.5 border border-gray-300 rounded-lg focus:ring-2 focus:ring-orange-500 focus:border-orange-500"
+            />
+          </div>
+        </div>
+        <div>
+          <label className="block text-sm font-medium text-gray-700 mb-1">Description</label>
+          <textarea
+            value={newProject.description}
+            onChange={(e) => setNewProject({ ...newProject, description: e.target.value })}
+            placeholder="What is this project about?"
+            className="w-full px-4 py-2.5 border border-gray-300 rounded-lg focus:ring-2 focus:ring-orange-500 focus:border-orange-500"
+            rows={2}
+          />
+        </div>
+        <div className="flex justify-end">
+          <button
+            type="submit"
+            disabled={createProject.isPending}
+            className="px-5 py-2.5 bg-orange-500 text-white rounded-lg font-medium hover:bg-orange-600 transition-colors disabled:opacity-60"
+          >
+            {createProject.isPending ? 'Saving...' : 'Add Project'}
+          </button>
+        </div>
+      </form>
+
+      <div className="space-y-3">
+        {projects?.length === 0 ? (
+          <div className="text-center py-10 bg-white border border-dashed border-gray-200 rounded-xl text-gray-500">
+            No projects yet. Create one above.
+          </div>
+        ) : (
+          projects?.map((project) => (
+            <div
+              key={project.id}
+              className="border border-gray-200 rounded-xl bg-white p-4 flex flex-col gap-3 md:flex-row md:items-center md:justify-between"
+            >
+              <div className="flex items-start gap-3">
+                <div className="w-10 h-10 rounded-full bg-orange-100 flex items-center justify-center text-lg">
+                  {project.icon || '📁'}
+                </div>
+                <div>
+                  <p className="text-sm text-gray-400">Project #{project.id}</p>
+                  {editingProject?.id === project.id ? (
+                    <input
+                      type="text"
+                      value={editValues.name}
+                      onChange={(e) => setEditValues({ ...editValues, name: e.target.value })}
+                      className="mt-1 px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-orange-500 focus:border-orange-500 w-full"
+                    />
+                  ) : (
+                    <h3 className="text-lg font-semibold text-gray-900 flex items-center gap-2">
+                      {project.name}
+                      {project.name === 'Office Tasks' && (
+                        <span className="text-xs text-gray-500 bg-gray-100 px-2 py-0.5 rounded-full">Default</span>
+                      )}
+                    </h3>
+                  )}
+                  {editingProject?.id === project.id ? (
+                    <textarea
+                      value={editValues.description}
+                      onChange={(e) => setEditValues({ ...editValues, description: e.target.value })}
+                      className="mt-2 px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-orange-500 focus:border-orange-500 w-full"
+                      rows={2}
+                    />
+                  ) : (
+                    <p className="text-sm text-gray-600 mt-1">
+                      {project.description || 'No description provided'}
+                    </p>
+                  )}
+                </div>
+              </div>
+              <div className="flex gap-2">
+                {editingProject?.id === project.id ? (
+                  <>
+                    <button
+                      onClick={() => handleUpdate(project.id)}
+                      className="px-4 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 transition-colors"
+                      disabled={updateProject.isPending}
+                    >
+                      {updateProject.isPending ? 'Saving...' : 'Save'}
+                    </button>
+                    <button
+                      onClick={() => setEditingProject(null)}
+                      className="px-4 py-2 bg-gray-100 text-gray-700 rounded-lg hover:bg-gray-200 transition-colors"
+                    >
+                      Cancel
+                    </button>
+                  </>
+                ) : (
+                  <button
+                    onClick={() => startEdit(project)}
+                    className="px-4 py-2 bg-white border border-gray-300 text-gray-700 rounded-lg hover:bg-gray-50 transition-colors"
+                  >
+                    Edit
+                  </button>
+                )}
+              </div>
+            </div>
+          ))
+        )}
+      </div>
     </div>
   );
 }

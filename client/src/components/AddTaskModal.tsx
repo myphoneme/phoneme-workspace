@@ -3,6 +3,7 @@ import { useCreateTodo } from '../hooks/useTodos';
 import { useActiveUsers } from '../hooks/useUsers';
 import { useAuth } from '../contexts/AuthContext';
 import { formatEstimatedTime, getEstimatedTime } from '../utils/time';
+import { useProjects } from '../hooks/useProjects';
 
 interface AddTaskModalProps {
   isOpen: boolean;
@@ -14,6 +15,7 @@ export function AddTaskModal({ isOpen, onClose }: AddTaskModalProps) {
   const [title, setTitle] = useState('');
   const [description, setDescription] = useState('');
   const [assigneeId, setAssigneeId] = useState<number | ''>('');
+  const [projectId, setProjectId] = useState<number | ''>('');
   const [priority, setPriority] = useState<'low' | 'medium' | 'high'>('medium');
   const [dueDate, setDueDate] = useState('');
   const [step, setStep] = useState(1);
@@ -21,12 +23,14 @@ export function AddTaskModal({ isOpen, onClose }: AddTaskModalProps) {
   const titleInputRef = useRef<HTMLInputElement>(null);
   const createTodo = useCreateTodo();
   const { data: users, isLoading: usersLoading } = useActiveUsers();
+  const { data: projects, isLoading: projectsLoading } = useProjects();
 
   useEffect(() => {
     if (isOpen) {
       setTitle('');
       setDescription('');
       setAssigneeId('');
+      setProjectId('');
       setPriority('medium');
       setDueDate('');
       setStep(1);
@@ -35,10 +39,16 @@ export function AddTaskModal({ isOpen, onClose }: AddTaskModalProps) {
     }
   }, [isOpen]);
 
+  useEffect(() => {
+    if (isOpen && projects && projects.length > 0 && projectId === '') {
+      setProjectId(projects[0].id);
+    }
+  }, [isOpen, projects, projectId]);
+
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
 
-    if (!title || !description || !assigneeId) {
+    if (!title || !description || !assigneeId || !projectId) {
       return;
     }
 
@@ -47,6 +57,7 @@ export function AddTaskModal({ isOpen, onClose }: AddTaskModalProps) {
         title,
         description,
         assigneeId: Number(assigneeId),
+        projectId: Number(projectId),
         priority,
         dueDate: dueDate || undefined,
       },
@@ -179,6 +190,55 @@ export function AddTaskModal({ isOpen, onClose }: AddTaskModalProps) {
                         </div>
                         {assigneeId === u.id && (
                           <CheckCircleIcon className="w-5 h-5 text-orange-500 flex-shrink-0" />
+                        )}
+                      </button>
+                    ))}
+                  </div>
+                )}
+              </div>
+
+              {/* Project Selection */}
+              <div>
+                <div className="flex items-center justify-between mb-2">
+                  <label className="block text-sm font-medium text-gray-700">Project</label>
+                  <span className="text-xs text-gray-500">Office Tasks is the default workspace</span>
+                </div>
+                {projectsLoading ? (
+                  <div className="flex items-center gap-2 text-gray-500">
+                    <LoadingSpinner className="w-4 h-4" />
+                    Loading projects...
+                  </div>
+                ) : (
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+                    {projects?.map((project) => (
+                      <button
+                        key={project.id}
+                        type="button"
+                        onClick={() => setProjectId(project.id)}
+                        className={`flex items-start gap-3 p-3 rounded-xl border-2 text-left transition-all ${
+                          projectId === project.id
+                            ? 'border-orange-500 bg-orange-50'
+                            : 'border-gray-200 hover:border-orange-300 hover:bg-gray-50'
+                        }`}
+                      >
+                        <div className="w-10 h-10 rounded-full bg-orange-100 flex items-center justify-center text-lg">
+                          {project.icon || '📁'}
+                        </div>
+                        <div className="space-y-0.5">
+                          <p className="text-sm font-semibold text-gray-900 flex items-center gap-2">
+                            {project.name}
+                            {project.name === 'Office Tasks' && (
+                              <span className="text-[10px] uppercase tracking-wide bg-gray-100 text-gray-600 px-2 py-0.5 rounded-full">
+                                Default
+                              </span>
+                            )}
+                          </p>
+                          <p className="text-xs text-gray-500 line-clamp-2">
+                            {project.description || 'No description'}
+                          </p>
+                        </div>
+                        {projectId === project.id && (
+                          <CheckCircleIcon className="w-5 h-5 text-orange-500 ml-auto" />
                         )}
                       </button>
                     ))}
