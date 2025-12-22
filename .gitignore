@@ -36,3 +36,4 @@ snapshots/
 *.njsproj
 *.sln
 *.sw?
+server/uploads/
