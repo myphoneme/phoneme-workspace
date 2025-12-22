@@ -132,3 +132,11 @@ export interface AuthContextType {
   logout: () => Promise<void>;
   isAdmin: boolean;
 }
+
+export interface WorkspaceSyncMetadata {
+  lastSyncedAt: string | null;
+  syncedCount: number;
+  importedCount: number;
+  updatedCount: number;
+  sampleUsers: string[];
+}

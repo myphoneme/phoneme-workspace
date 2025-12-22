@@ -2,12 +2,32 @@ import { Router, Request, Response } from 'express';
 import bcrypt from 'bcrypt';
 import db from '../db';
 import { authenticateToken, requireAdmin } from '../middleware/auth';
-import type { User, UserResponse, CreateUserInput, UpdateUserInput } from '../types';
+import { getWorkspaceSyncMetadata, syncWorkspaceUsers } from '../services/workspace';
+import type { User, UserResponse, CreateUserInput, UpdateUserInput, WorkspaceSyncMetadata } from '../types';
 
 const router = Router();
 
 // All routes require authentication
 router.use(authenticateToken);
+
+// Workspace sync status (admin)
+router.get('/workspace-sync', requireAdmin, (_req: Request, res: Response): void => {
+  const metadata = getWorkspaceSyncMetadata();
+  res.json(metadata);
+});
+
+// Trigger workspace sync (admin)
+router.post('/sync-workspace', requireAdmin, async (_req: Request, res: Response): Promise<void> => {
+  try {
+    const metadata = await syncWorkspaceUsers();
+    res.json(metadata);
+  } catch (error) {
+    console.error('Workspace sync failed:', error);
+    const message =
+      error instanceof Error ? error.message : 'Failed to sync workspace users. Please try again later.';
+    res.status(400).json({ error: message });
+  }
+});
 
 // Get all users (any authenticated user can view users for assignment)
 router.get('/', (req: Request, res: Response): void => {

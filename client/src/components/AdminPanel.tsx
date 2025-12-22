@@ -1,8 +1,10 @@
-import { useState, FormEvent } from 'react';
+import { useState } from 'react';
 import { useUsers, useUpdateUser } from '../hooks/useUsers';
 import { useSetting, useUpdateSetting } from '../hooks/useSettings';
 import { useProjects, useCreateProject, useUpdateProject } from '../hooks/useProjects';
+import { useWorkspaceSyncAction, useWorkspaceSyncStatus } from '../hooks/useWorkspaceSync';
 import type { User, Project } from '../types';
+import type { FormEvent } from 'react';
 
 interface AdminPanelProps {
   onBack: () => void;
@@ -92,6 +94,8 @@ export function AdminPanel({ onBack }: AdminPanelProps) {
 function UsersTab() {
   const { data: users, isLoading } = useUsers();
   const updateUser = useUpdateUser();
+  const { data: syncStatus, isError } = useWorkspaceSyncStatus();
+  const syncWorkspace = useWorkspaceSyncAction();
   const [editingUser, setEditingUser] = useState<User | null>(null);
 
   const handleRoleChange = async (user: User, newRole: 'admin' | 'user') => {
@@ -147,6 +151,86 @@ function UsersTab() {
 
   return (
     <div>
+      <div className="grid grid-cols-1 gap-4 mb-6">
+        <div className="p-4 bg-orange-50 border border-orange-100 rounded-lg">
+          <div className="flex items-start justify-between gap-4">
+            <div>
+              <p className="text-xs uppercase tracking-wide text-orange-600 font-semibold mb-1">Google Workspace</p>
+              <h3 className="text-lg font-semibold text-gray-900">Sync users from Workspace</h3>
+              <p className="text-sm text-gray-600 mt-1">
+                Import and refresh all users from the Phoneme Google Workspace. We will update names/photos and keep
+                accounts active.
+              </p>
+              <div className="mt-3 flex flex-wrap items-center gap-3 text-sm text-gray-700">
+                <span className="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-white border border-orange-100 text-orange-700">
+                  <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8v4l3 3" />
+                  </svg>
+                  Last sync:{' '}
+                  {syncStatus?.lastSyncedAt ? new Date(syncStatus.lastSyncedAt).toLocaleString() : 'Not synced yet'}
+                </span>
+                <span className="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-white border border-orange-100 text-gray-700">
+                  <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 12h18" />
+                  </svg>
+                  {syncStatus?.syncedCount ?? 0} users seen
+                </span>
+                {(syncStatus?.importedCount || syncStatus?.updatedCount) && (
+                  <span className="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-white border border-orange-100 text-gray-700">
+                    <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
+                    </svg>
+                    {syncStatus?.importedCount ?? 0} new / {syncStatus?.updatedCount ?? 0} updated
+                  </span>
+                )}
+              </div>
+              {syncStatus?.sampleUsers?.length ? (
+                <div className="mt-3 text-xs text-gray-600">
+                  Last synced users:{' '}
+                  <span className="font-medium text-gray-800">{syncStatus.sampleUsers.join(', ')}</span>
+                </div>
+              ) : null}
+              {isError && (
+                <p className="mt-2 text-sm text-red-600">
+                  Workspace sync status unavailable. Ensure service account env vars are set.
+                </p>
+              )}
+            </div>
+            <button
+              onClick={() => syncWorkspace.mutate()}
+              disabled={syncWorkspace.isPending}
+              className="inline-flex items-center gap-2 px-4 py-2 bg-orange-500 text-white rounded-md shadow hover:bg-orange-600 disabled:opacity-60"
+            >
+              {syncWorkspace.isPending ? (
+                <>
+                  <svg className="w-4 h-4 animate-spin" viewBox="0 0 24 24" fill="none">
+                    <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
+                    <path
+                      className="opacity-75"
+                      fill="currentColor"
+                      d="M4 12a8 8 0 018-8v2.5a5.5 5.5 0 00-5.5 5.5H4z"
+                    />
+                  </svg>
+                  Syncing...
+                </>
+              ) : (
+                <>
+                  <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v4m0 0a4 4 0 100 8h0a4 4 0 000-8m0 0V4" />
+                  </svg>
+                  Sync Workspace
+                </>
+              )}
+            </button>
+          </div>
+          {syncWorkspace.isError && (
+            <p className="mt-3 text-sm text-red-600">
+              {syncWorkspace.error instanceof Error ? syncWorkspace.error.message : 'Failed to sync workspace.'}
+            </p>
+          )}
+        </div>
+      </div>
+
       <div className="mb-6">
         <h2 className="text-xl font-semibold text-gray-900">User Management</h2>
         <p className="text-sm text-gray-500 mt-1">

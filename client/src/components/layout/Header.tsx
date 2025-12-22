@@ -8,9 +8,20 @@ import type { Notification } from '../../types';
 interface HeaderProps {
   onOpenAIChat?: () => void;
   onOpenMessages?: () => void;
+  title?: string;
+  searchQuery?: string;
+  onSearchChange?: (query: string) => void;
+  showSearch?: boolean;
 }
 
-export function Header({ onOpenAIChat, onOpenMessages }: HeaderProps) {
+export function Header({
+  onOpenAIChat,
+  onOpenMessages,
+  title,
+  searchQuery,
+  onSearchChange,
+  showSearch = false,
+}: HeaderProps) {
   const { user, logout } = useAuth();
   const { theme, setTheme, resolvedTheme } = useTheme();
   const { data: notifications } = useNotifications();
@@ -21,10 +32,15 @@ export function Header({ onOpenAIChat, onOpenMessages }: HeaderProps) {
   const [showProfileMenu, setShowProfileMenu] = useState(false);
   const [showNotifications, setShowNotifications] = useState(false);
   const [showThemeMenu, setShowThemeMenu] = useState(false);
+  const [internalSearch, setInternalSearch] = useState(searchQuery ?? '');
 
   const profileRef = useRef<HTMLDivElement>(null);
   const notifRef = useRef<HTMLDivElement>(null);
   const themeRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    setInternalSearch(searchQuery ?? '');
+  }, [searchQuery]);
 
   // Close dropdowns on outside click
   useEffect(() => {
@@ -62,20 +78,34 @@ export function Header({ onOpenAIChat, onOpenMessages }: HeaderProps) {
     }
   };
 
+  const handleSearchChange = (value: string) => {
+    if (onSearchChange) {
+      onSearchChange(value);
+    } else {
+      setInternalSearch(value);
+    }
+  };
+
+  const searchValue = onSearchChange ? (searchQuery ?? '') : internalSearch;
+
   return (
     <header className="bg-white dark:bg-gray-800 border-b border-gray-200 dark:border-gray-700 px-6 py-3">
       <div className="flex items-center justify-between">
-        {/* Left Side - can be used for breadcrumbs or page title */}
+        {/* Left Side - title and optional search */}
         <div className="flex items-center gap-4">
-          {/* Global Search - Cmd+K */}
-          <div className="relative">
-            <SearchIcon className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400" />
-            <input
-              type="text"
-              placeholder="Search... (⌘K)"
-              className="pl-9 pr-4 py-2 w-72 bg-gray-100 dark:bg-gray-700 border-0 rounded-lg text-sm focus:ring-2 focus:ring-orange-500 dark:text-white placeholder-gray-400"
-            />
-          </div>
+          {title && <h1 className="text-lg font-semibold text-gray-900 dark:text-white">{title}</h1>}
+          {showSearch && (
+            <div className="relative">
+              <SearchIcon className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400" />
+              <input
+                type="text"
+                value={searchValue}
+                onChange={(e) => handleSearchChange(e.target.value)}
+                placeholder="Search... (⌘K)"
+                className="pl-9 pr-4 py-2 w-72 bg-gray-100 dark:bg-gray-700 border-0 rounded-lg text-sm focus:ring-2 focus:ring-orange-500 dark:text-white placeholder-gray-400"
+              />
+            </div>
+          )}
         </div>
 
         {/* Right Side - Actions */}

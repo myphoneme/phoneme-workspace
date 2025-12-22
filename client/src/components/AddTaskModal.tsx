@@ -18,7 +18,6 @@ export function AddTaskModal({ isOpen, onClose }: AddTaskModalProps) {
   const [projectId, setProjectId] = useState<number | ''>('');
   const [priority, setPriority] = useState<'low' | 'medium' | 'high'>('medium');
   const [dueDate, setDueDate] = useState('');
-  const [step, setStep] = useState(1);
 
   const titleInputRef = useRef<HTMLInputElement>(null);
   const createTodo = useCreateTodo();
@@ -33,7 +32,6 @@ export function AddTaskModal({ isOpen, onClose }: AddTaskModalProps) {
       setProjectId('');
       setPriority('medium');
       setDueDate('');
-      setStep(1);
       // Focus title input when modal opens
       setTimeout(() => titleInputRef.current?.focus(), 100);
     }

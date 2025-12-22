@@ -138,6 +138,14 @@ export interface LoginInput {
   password: string;
 }
 
+export interface WorkspaceSyncMetadata {
+  lastSyncedAt: string | null;
+  syncedCount: number;
+  importedCount: number;
+  updatedCount: number;
+  sampleUsers: string[];
+}
+
 export interface JwtPayload {
   userId: number;
   email: string;

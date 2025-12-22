@@ -1,5 +1,5 @@
 import { api } from './client';
-import type { User, CreateUserInput, UpdateUserInput } from '../types';
+import type { User, CreateUserInput, UpdateUserInput, WorkspaceSyncMetadata } from '../types';
 
 export const usersApi = {
   getAll: () => api.get<User[]>('/users'),
@@ -13,4 +13,8 @@ export const usersApi = {
   update: (id: number, data: UpdateUserInput) => api.put<User>(`/users/${id}`, data),
 
   delete: (id: number) => api.delete(`/users/${id}`),
+
+  getWorkspaceSync: () => api.get<WorkspaceSyncMetadata>('/users/workspace-sync'),
+
+  syncWorkspace: () => api.post<WorkspaceSyncMetadata>('/users/sync-workspace'),
 };

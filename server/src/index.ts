@@ -15,8 +15,27 @@ const app = express();
 const PORT = process.env.PORT || 3001;
 
 // Middleware
+const allowedOrigins = [
+  process.env.CORS_ORIGIN || 'http://localhost:5173',
+  'http://10.100.60.111:5173',
+  'http://phoneme.in',
+  'https://phoneme.in',
+  'http://api.phoneme.in',
+  'http://api.phoneme.in:9000',
+  'https://api.phoneme.in',
+  'https://api.phoneme.in:9000',
+  'http://api.phoneme.in:9001',
+  'https://api.phoneme.in:9001',
+  'https://www.phoneme.in',
+];
+
 app.use(cors({
-  origin: 'http://localhost:5173',
+  origin: (origin, callback) => {
+    if (!origin || allowedOrigins.includes(origin)) {
+      return callback(null, true);
+    }
+    return callback(new Error('Not allowed by CORS'));
+  },
   credentials: true,
 }));
 app.use(express.json());

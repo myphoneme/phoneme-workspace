@@ -1,7 +1,7 @@
-import { ReactNode, useState } from 'react';
+import { useState } from 'react';
+import type { ReactNode } from 'react';
 import { Sidebar } from './Sidebar';
 import { Header } from './Header';
-import { useAuth } from '../../contexts/AuthContext';
 
 interface MainLayoutProps {
   children: ReactNode;
@@ -14,12 +14,11 @@ interface MainLayoutProps {
 export function MainLayout({
   children,
   title,
-  searchQuery,
-  onSearchChange,
-  showSearch = false,
-}: MainLayoutProps) {
+    searchQuery,
+    onSearchChange,
+    showSearch = false,
+  }: MainLayoutProps) {
   const [currentPage, setCurrentPage] = useState('tasks');
-  const { isAdmin } = useAuth();
 
   const handlePageChange = (page: string) => {
     setCurrentPage(page);

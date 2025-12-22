@@ -1,4 +1,4 @@
-import { useState, useMemo } from 'react';
+import { useState, useMemo, useEffect } from 'react';
 import { useTodos } from '../hooks/useTodos';
 import { useAuth } from '../contexts/AuthContext';
 import { useProjects } from '../hooks/useProjects';
@@ -12,11 +12,16 @@ export function TaskManager() {
   const { user } = useAuth();
   const { data: todos, isLoading, error } = useTodos();
   const { data: projects } = useProjects();
+  const isAdmin = user?.role === 'admin';
   const [searchQuery, setSearchQuery] = useState('');
-  const [filter, setFilter] = useState<FilterType>('all');
+  const [filter, setFilter] = useState<FilterType>(isAdmin ? 'all' : 'assigned');
   const [sortBy, setSortBy] = useState<SortType>('newest');
   const [showAddModal, setShowAddModal] = useState(false);
   const [projectFilter, setProjectFilter] = useState<number | 'all'>('all');
+
+  useEffect(() => {
+    setFilter(isAdmin ? 'all' : 'assigned');
+  }, [isAdmin]);
 
   const filteredAndSortedTodos = useMemo(() => {
     if (!todos) return [];
@@ -81,14 +86,16 @@ export function TaskManager() {
   }, [todos, searchQuery, filter, sortBy, user?.id, projectFilter]);
 
   const stats = useMemo(() => {
-    if (!todos) return { total: 0, completed: 0, pending: 0, favorites: 0 };
+    if (!todos) return { total: 0, completed: 0, pending: 0, favorites: 0, assignedToMe: 0, createdByMe: 0 };
     return {
       total: todos.length,
       completed: todos.filter((t) => t.completed).length,
       pending: todos.filter((t) => !t.completed).length,
       favorites: todos.filter((t) => t.isFavorite).length,
+      assignedToMe: todos.filter((t) => t.assigneeId === user?.id).length,
+      createdByMe: todos.filter((t) => t.assignerId === user?.id).length,
     };
-  }, [todos]);
+  }, [todos, user?.id]);
 
   return (
     <div className="min-h-screen bg-gray-50">
@@ -103,7 +110,9 @@ export function TaskManager() {
               </div>
               <div>
                 <h1 className="text-xl font-semibold text-gray-900">Tasks List</h1>
-                <p className="text-xs text-gray-500">{stats.total} total tasks</p>
+                <p className="text-xs text-gray-500">
+                  {stats.total} total tasks{!isAdmin ? ' (visible tasks are ones you assign or are assigned to)' : ''}
+                </p>
               </div>
             </div>
 
@@ -149,9 +158,11 @@ export function TaskManager() {
         {/* Filter Tabs */}
         <div className="px-6 pb-0 flex items-center justify-between">
           <div className="flex gap-1 border-b border-gray-200 -mb-px">
-            <FilterTab active={filter === 'all'} onClick={() => setFilter('all')} count={stats.total}>
-              All
-            </FilterTab>
+            {isAdmin && (
+              <FilterTab active={filter === 'all'} onClick={() => setFilter('all')} count={stats.total}>
+                All
+              </FilterTab>
+            )}
             <FilterTab active={filter === 'pending'} onClick={() => setFilter('pending')} count={stats.pending}>
               Pending
             </FilterTab>
@@ -161,8 +172,19 @@ export function TaskManager() {
             <FilterTab active={filter === 'favorites'} onClick={() => setFilter('favorites')} count={stats.favorites}>
               Starred
             </FilterTab>
-            <FilterTab active={filter === 'assigned'} onClick={() => setFilter('assigned')}>
-              My Tasks
+            <FilterTab
+              active={filter === 'assigned'}
+              onClick={() => setFilter('assigned')}
+              count={stats.assignedToMe}
+            >
+              Assigned to me
+            </FilterTab>
+            <FilterTab
+              active={filter === 'created'}
+              onClick={() => setFilter('created')}
+              count={stats.createdByMe}
+            >
+              Assigned by me
             </FilterTab>
           </div>
 

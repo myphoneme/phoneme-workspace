@@ -11,7 +11,8 @@ router.use(authenticateToken);
 // Get all todos with user details
 router.get('/', (req: Request, res: Response): void => {
   try {
-    const todos = db.prepare(`
+    const isAdmin = req.user?.role === 'admin';
+    const baseQuery = `
       SELECT
         t.*,
         assigner.name as assignerName,
@@ -25,8 +26,13 @@ router.get('/', (req: Request, res: Response): void => {
       JOIN users assigner ON t.assignerId = assigner.id
       JOIN users assignee ON t.assigneeId = assignee.id
       JOIN projects p ON t.projectId = p.id
-      ORDER BY t.createdAt DESC
-    `).all() as any[];
+    `;
+
+    const todos = isAdmin
+      ? (db.prepare(`${baseQuery} ORDER BY t.createdAt DESC`).all() as any[])
+      : (db
+          .prepare(`${baseQuery} WHERE t.assignerId = ? OR t.assigneeId = ? ORDER BY t.createdAt DESC`)
+          .all(req.user!.userId, req.user!.userId) as any[]);
 
     const formattedTodos: TodoWithUsers[] = todos.map(todo => ({
       ...todo,
@@ -63,6 +69,12 @@ router.get('/:id', (req: Request, res: Response): void => {
 
     if (!todo) {
       res.status(404).json({ error: 'Todo not found' });
+      return;
+    }
+
+    const isAdmin = req.user?.role === 'admin';
+    if (!isAdmin && todo.assignerId !== req.user!.userId && todo.assigneeId !== req.user!.userId) {
+      res.status(403).json({ error: 'Access denied' });
       return;
     }
 
@@ -140,9 +152,15 @@ router.put('/:id', (req: Request, res: Response): void => {
     const todoId = req.params.id;
     const normalizedProjectId = projectId !== undefined ? Number(projectId) : undefined;
 
-    const todo = db.prepare('SELECT * FROM todos WHERE id = ?').get(todoId);
+    const todo = db.prepare('SELECT * FROM todos WHERE id = ?').get(todoId) as any;
     if (!todo) {
       res.status(404).json({ error: 'Todo not found' });
+      return;
+    }
+
+    const isAdmin = req.user?.role === 'admin';
+    if (!isAdmin && todo.assignerId !== req.user!.userId && todo.assigneeId !== req.user!.userId) {
+      res.status(403).json({ error: 'Access denied' });
       return;
     }
 
@@ -237,11 +255,19 @@ router.put('/:id', (req: Request, res: Response): void => {
 // Delete todo
 router.delete('/:id', (req: Request, res: Response): void => {
   try {
-    const result = db.prepare('DELETE FROM todos WHERE id = ?').run(req.params.id);
-    if (result.changes === 0) {
+    const todo = db.prepare('SELECT * FROM todos WHERE id = ?').get(req.params.id) as any;
+    if (!todo) {
       res.status(404).json({ error: 'Todo not found' });
       return;
     }
+
+    const isAdmin = req.user?.role === 'admin';
+    if (!isAdmin && todo.assignerId !== req.user!.userId && todo.assigneeId !== req.user!.userId) {
+      res.status(403).json({ error: 'Access denied' });
+      return;
+    }
+
+    db.prepare('DELETE FROM todos WHERE id = ?').run(req.params.id);
     res.status(204).send();
   } catch (error) {
     res.status(500).json({ error: 'Failed to delete todo' });
