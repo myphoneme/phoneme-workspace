@@ -1,7 +1,7 @@
 const envApiUrl = import.meta.env.VITE_API_URL;
 const defaultApiUrl =
   typeof window !== 'undefined' && window.location.protocol === 'https:'
-    ? 'https://api.phoneme.in:9001/api'
+    ? 'https://api.phoneme.in:9000/api'
     : 'http://localhost:3001/api';
 
 export const API_BASE_URL = envApiUrl || defaultApiUrl;
