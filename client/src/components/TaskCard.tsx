@@ -4,6 +4,7 @@ import { useUpdateTodo, useDeleteTodo } from '../hooks/useTodos';
 import { useActiveUsers } from '../hooks/useUsers';
 import { useAuth } from '../contexts/AuthContext';
 import { useProjects } from '../hooks/useProjects';
+import { getProjectInitials, getProjectColor } from '../utils/projectUtils';
 import { Comments } from './Comments';
 import {
   timeAgo,
@@ -233,8 +234,10 @@ export function TaskCard({ todo }: TaskCardProps) {
                 >
                   {todo.title}
                 </h3>
-                <span className="px-2 py-0.5 text-xs font-medium rounded-full bg-blue-50 text-blue-700 border border-blue-100">
-                  {todo.projectIcon ? `${todo.projectIcon} ` : ''}
+                <span className="inline-flex items-center gap-1.5 px-2 py-0.5 text-xs font-medium rounded-full bg-gray-100 text-gray-700 border border-gray-200">
+                  <span className={`w-4 h-4 ${getProjectColor(todo.projectId)} rounded text-white text-[8px] font-bold flex items-center justify-center`}>
+                    {getProjectInitials(todo.projectName)}
+                  </span>
                   {todo.projectName}
                 </span>
 
@@ -258,6 +261,30 @@ export function TaskCard({ todo }: TaskCardProps) {
               <p className={`text-sm mt-0.5 ${todo.completed ? 'text-gray-400' : 'text-gray-500'}`}>
                 {todo.description}
               </p>
+
+              {/* Dates Row */}
+              <div className="flex items-center gap-4 mt-2 text-xs">
+                <span className="flex items-center gap-1 text-gray-500">
+                  <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" />
+                  </svg>
+                  Created: {new Date(todo.createdAt).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })}
+                </span>
+                {todo.dueDate && (
+                  <span className={`flex items-center gap-1 ${
+                    !todo.completed && new Date(todo.dueDate).getTime() < Date.now()
+                      ? 'text-red-600 font-medium'
+                      : 'text-gray-500'
+                  }`}>
+                    <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z" />
+                    </svg>
+                    Due: {new Date(todo.dueDate).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })}
+                    {' '}
+                    {new Date(todo.dueDate).toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit', hour12: true })}
+                  </span>
+                )}
+              </div>
 
               {/* Meta Row - Icons and Info */}
               <div className="flex items-center gap-4 mt-3 text-xs">
