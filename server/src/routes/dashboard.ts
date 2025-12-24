@@ -7,6 +7,32 @@ const router = Router();
 // All routes require authentication
 router.use(authenticateToken);
 
+// Helper to check if value is truthy (handles PostgreSQL bigint as string)
+const isTruthy = (val: any) => val == 1 || val === '1' || val === true;
+
+// Transform database row to frontend format (lowercase to camelCase)
+const transformTodo = (todo: any) => ({
+  id: todo.id,
+  title: todo.title,
+  description: todo.description,
+  assignerId: todo.assignerid,
+  assigneeId: todo.assigneeid,
+  projectId: todo.projectid,
+  completed: isTruthy(todo.completed),
+  priority: todo.priority,
+  isFavorite: isTruthy(todo.isfavorite),
+  dueDate: todo.duedate,
+  createdAt: todo.createdat,
+  updatedAt: todo.updatedat,
+  assignerName: todo.assignername,
+  assignerEmail: todo.assigneremail,
+  assigneeName: todo.assigneename,
+  assigneeEmail: todo.assigneeemail,
+  projectName: todo.projectname,
+  projectDescription: todo.projectdescription,
+  projectIcon: todo.projecticon,
+});
+
 interface ProjectStats {
   id: number;
   name: string;
@@ -22,7 +48,7 @@ interface UserStats {
   id: number;
   name: string;
   email: string;
-  profilePhoto: string | null;
+  profilephoto: string | null;
   total: number;
   completed: number;
   incomplete: number;
@@ -31,7 +57,7 @@ interface UserStats {
 }
 
 // Get dashboard statistics
-router.get('/stats', (req: Request, res: Response): void => {
+router.get('/stats', async (req: Request, res: Response): Promise<void> => {
   try {
     const isAdmin = req.user?.role === 'admin';
     const userId = req.user!.userId;
@@ -40,30 +66,30 @@ router.get('/stats', (req: Request, res: Response): void => {
     // Get overall stats
     let overallStats;
     if (isAdmin) {
-      overallStats = db.prepare(`
+      overallStats = await db.prepare(`
         SELECT
           COUNT(*) as total,
           SUM(CASE WHEN completed = 1 THEN 1 ELSE 0 END) as completed,
           SUM(CASE WHEN completed = 0 THEN 1 ELSE 0 END) as incomplete,
-          SUM(CASE WHEN completed = 0 AND dueDate IS NOT NULL AND dueDate < ? THEN 1 ELSE 0 END) as overdue
+          SUM(CASE WHEN completed = 0 AND duedate IS NOT NULL AND duedate < ? THEN 1 ELSE 0 END) as overdue
         FROM todos
       `).get(now) as any;
     } else {
-      overallStats = db.prepare(`
+      overallStats = await db.prepare(`
         SELECT
           COUNT(*) as total,
           SUM(CASE WHEN completed = 1 THEN 1 ELSE 0 END) as completed,
           SUM(CASE WHEN completed = 0 THEN 1 ELSE 0 END) as incomplete,
-          SUM(CASE WHEN completed = 0 AND dueDate IS NOT NULL AND dueDate < ? THEN 1 ELSE 0 END) as overdue
+          SUM(CASE WHEN completed = 0 AND duedate IS NOT NULL AND duedate < ? THEN 1 ELSE 0 END) as overdue
         FROM todos
-        WHERE assignerId = ? OR assigneeId = ?
+        WHERE assignerid = ? OR assigneeid = ?
       `).get(now, userId, userId) as any;
     }
 
     // Get project-wise stats
     let projectStats: ProjectStats[];
     if (isAdmin) {
-      projectStats = db.prepare(`
+      projectStats = await db.prepare(`
         SELECT
           p.id,
           p.name,
@@ -71,14 +97,14 @@ router.get('/stats', (req: Request, res: Response): void => {
           COUNT(t.id) as total,
           SUM(CASE WHEN t.completed = 1 THEN 1 ELSE 0 END) as completed,
           SUM(CASE WHEN t.completed = 0 THEN 1 ELSE 0 END) as incomplete,
-          SUM(CASE WHEN t.completed = 0 AND t.dueDate IS NOT NULL AND t.dueDate < ? THEN 1 ELSE 0 END) as overdue
+          SUM(CASE WHEN t.completed = 0 AND t.duedate IS NOT NULL AND t.duedate < ? THEN 1 ELSE 0 END) as overdue
         FROM projects p
-        LEFT JOIN todos t ON t.projectId = p.id
+        LEFT JOIN todos t ON t.projectid = p.id
         GROUP BY p.id
         ORDER BY total DESC
       `).all(now) as any[];
     } else {
-      projectStats = db.prepare(`
+      projectStats = await db.prepare(`
         SELECT
           p.id,
           p.name,
@@ -86,11 +112,11 @@ router.get('/stats', (req: Request, res: Response): void => {
           COUNT(t.id) as total,
           SUM(CASE WHEN t.completed = 1 THEN 1 ELSE 0 END) as completed,
           SUM(CASE WHEN t.completed = 0 THEN 1 ELSE 0 END) as incomplete,
-          SUM(CASE WHEN t.completed = 0 AND t.dueDate IS NOT NULL AND t.dueDate < ? THEN 1 ELSE 0 END) as overdue
+          SUM(CASE WHEN t.completed = 0 AND t.duedate IS NOT NULL AND t.duedate < ? THEN 1 ELSE 0 END) as overdue
         FROM projects p
-        LEFT JOIN todos t ON t.projectId = p.id AND (t.assignerId = ? OR t.assigneeId = ?)
+        LEFT JOIN todos t ON t.projectid = p.id AND (t.assignerid = ? OR t.assigneeid = ?)
         GROUP BY p.id
-        HAVING total > 0
+        HAVING COUNT(t.id) > 0
         ORDER BY total DESC
       `).all(now, userId, userId) as any[];
     }
@@ -108,36 +134,36 @@ router.get('/stats', (req: Request, res: Response): void => {
     // Get user-wise stats
     let userStats: UserStats[];
     if (isAdmin) {
-      userStats = db.prepare(`
+      userStats = await db.prepare(`
         SELECT
           u.id,
           u.name,
           u.email,
-          u.profilePhoto,
+          u.profilephoto,
           COUNT(t.id) as total,
           SUM(CASE WHEN t.completed = 1 THEN 1 ELSE 0 END) as completed,
           SUM(CASE WHEN t.completed = 0 THEN 1 ELSE 0 END) as incomplete,
-          SUM(CASE WHEN t.completed = 0 AND t.dueDate IS NOT NULL AND t.dueDate < ? THEN 1 ELSE 0 END) as overdue
+          SUM(CASE WHEN t.completed = 0 AND t.duedate IS NOT NULL AND t.duedate < ? THEN 1 ELSE 0 END) as overdue
         FROM users u
-        LEFT JOIN todos t ON t.assigneeId = u.id
-        WHERE u.isActive = 1
+        LEFT JOIN todos t ON t.assigneeid = u.id
+        WHERE u.isactive = 1
         GROUP BY u.id
         ORDER BY total DESC
       `).all(now) as any[];
     } else {
       // For non-admin users, only show their own stats
-      userStats = db.prepare(`
+      userStats = await db.prepare(`
         SELECT
           u.id,
           u.name,
           u.email,
-          u.profilePhoto,
+          u.profilephoto,
           COUNT(t.id) as total,
           SUM(CASE WHEN t.completed = 1 THEN 1 ELSE 0 END) as completed,
           SUM(CASE WHEN t.completed = 0 THEN 1 ELSE 0 END) as incomplete,
-          SUM(CASE WHEN t.completed = 0 AND t.dueDate IS NOT NULL AND t.dueDate < ? THEN 1 ELSE 0 END) as overdue
+          SUM(CASE WHEN t.completed = 0 AND t.duedate IS NOT NULL AND t.duedate < ? THEN 1 ELSE 0 END) as overdue
         FROM users u
-        LEFT JOIN todos t ON t.assigneeId = u.id
+        LEFT JOIN todos t ON t.assigneeid = u.id
         WHERE u.id = ?
         GROUP BY u.id
       `).all(now, userId) as any[];
@@ -173,7 +199,7 @@ router.get('/stats', (req: Request, res: Response): void => {
 });
 
 // Get pending tasks for a specific project
-router.get('/projects/:projectId/pending', (req: Request, res: Response): void => {
+router.get('/projects/:projectId/pending', async (req: Request, res: Response): Promise<void> => {
   try {
     const isAdmin = req.user?.role === 'admin';
     const userId = req.user!.userId;
@@ -182,31 +208,25 @@ router.get('/projects/:projectId/pending', (req: Request, res: Response): void =
     const baseQuery = `
       SELECT
         t.*,
-        assigner.name as assignerName,
-        assigner.email as assignerEmail,
-        assignee.name as assigneeName,
-        assignee.email as assigneeEmail,
-        p.name as projectName,
-        p.description as projectDescription,
-        p.icon as projectIcon
+        assigner.name as assignername,
+        assigner.email as assigneremail,
+        assignee.name as assigneename,
+        assignee.email as assigneeemail,
+        p.name as projectname,
+        p.description as projectdescription,
+        p.icon as projecticon
       FROM todos t
-      JOIN users assigner ON t.assignerId = assigner.id
-      JOIN users assignee ON t.assigneeId = assignee.id
-      JOIN projects p ON t.projectId = p.id
-      WHERE t.projectId = ? AND t.completed = 0
+      JOIN users assigner ON t.assignerid = assigner.id
+      JOIN users assignee ON t.assigneeid = assignee.id
+      JOIN projects p ON t.projectid = p.id
+      WHERE t.projectid = ? AND t.completed = 0
     `;
 
     const todos = isAdmin
-      ? db.prepare(`${baseQuery} ORDER BY t.dueDate ASC, t.priority DESC, t.createdAt DESC`).all(projectId) as any[]
-      : db.prepare(`${baseQuery} AND (t.assignerId = ? OR t.assigneeId = ?) ORDER BY t.dueDate ASC, t.priority DESC, t.createdAt DESC`).all(projectId, userId, userId) as any[];
+      ? await db.prepare(`${baseQuery} ORDER BY t.duedate ASC, t.priority DESC, t.createdat DESC`).all(projectId)
+      : await db.prepare(`${baseQuery} AND (t.assignerid = ? OR t.assigneeid = ?) ORDER BY t.duedate ASC, t.priority DESC, t.createdat DESC`).all(projectId, userId, userId);
 
-    const formattedTodos = todos.map(todo => ({
-      ...todo,
-      completed: Boolean(todo.completed),
-      isFavorite: Boolean(todo.isFavorite),
-    }));
-
-    res.json(formattedTodos);
+    res.json(todos.map(transformTodo));
   } catch (error) {
     console.error('Fetch pending tasks error:', error);
     res.status(500).json({ error: 'Failed to fetch pending tasks' });
@@ -214,7 +234,7 @@ router.get('/projects/:projectId/pending', (req: Request, res: Response): void =
 });
 
 // Get pending tasks for a specific user (assignee)
-router.get('/users/:userId/pending', (req: Request, res: Response): void => {
+router.get('/users/:userId/pending', async (req: Request, res: Response): Promise<void> => {
   try {
     const isAdmin = req.user?.role === 'admin';
     const currentUserId = req.user!.userId;
@@ -226,31 +246,25 @@ router.get('/users/:userId/pending', (req: Request, res: Response): void => {
       return;
     }
 
-    const todos = db.prepare(`
+    const todos = await db.prepare(`
       SELECT
         t.*,
-        assigner.name as assignerName,
-        assigner.email as assignerEmail,
-        assignee.name as assigneeName,
-        assignee.email as assigneeEmail,
-        p.name as projectName,
-        p.description as projectDescription,
-        p.icon as projectIcon
+        assigner.name as assignername,
+        assigner.email as assigneremail,
+        assignee.name as assigneename,
+        assignee.email as assigneeemail,
+        p.name as projectname,
+        p.description as projectdescription,
+        p.icon as projecticon
       FROM todos t
-      JOIN users assigner ON t.assignerId = assigner.id
-      JOIN users assignee ON t.assigneeId = assignee.id
-      JOIN projects p ON t.projectId = p.id
-      WHERE t.assigneeId = ? AND t.completed = 0
-      ORDER BY t.dueDate ASC, t.priority DESC, t.createdAt DESC
+      JOIN users assigner ON t.assignerid = assigner.id
+      JOIN users assignee ON t.assigneeid = assignee.id
+      JOIN projects p ON t.projectid = p.id
+      WHERE t.assigneeid = ? AND t.completed = 0
+      ORDER BY t.duedate ASC, t.priority DESC, t.createdat DESC
     `).all(targetUserId) as any[];
 
-    const formattedTodos = todos.map(todo => ({
-      ...todo,
-      completed: Boolean(todo.completed),
-      isFavorite: Boolean(todo.isFavorite),
-    }));
-
-    res.json(formattedTodos);
+    res.json(todos.map(transformTodo));
   } catch (error) {
     console.error('Fetch user pending tasks error:', error);
     res.status(500).json({ error: 'Failed to fetch pending tasks' });

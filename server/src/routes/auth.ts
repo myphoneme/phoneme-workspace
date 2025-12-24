@@ -43,7 +43,7 @@ router.post('/google', async (req: Request, res: Response): Promise<void> => {
     const profilePhoto = payload.picture || null;
 
     // Check domain restriction
-    const allowedDomainsSetting = db.prepare('SELECT value FROM settings WHERE key = ?').get('allowed_domains') as { value: string } | undefined;
+    const allowedDomainsSetting = await db.prepare('SELECT value FROM settings WHERE key = ?').get('allowed_domains') as { value: string } | undefined;
     if (allowedDomainsSetting) {
       const allowedDomains: string[] = JSON.parse(allowedDomainsSetting.value);
       if (allowedDomains.length > 0 && !allowedDomains.includes(emailDomain)) {
@@ -53,31 +53,31 @@ router.post('/google', async (req: Request, res: Response): Promise<void> => {
     }
 
     // Check if user exists
-    let user = db.prepare('SELECT * FROM users WHERE email = ?').get(email) as User | undefined;
+    let user = await db.prepare('SELECT * FROM users WHERE email = ?').get(email) as User | undefined;
 
     if (user) {
       // Existing user - check if active
-      if (!user.isActive) {
+      if (!user.isactive && user.isactive !== 1) {
         res.status(403).json({ error: 'Your account is deactivated. Contact your administrator.' });
         return;
       }
       // Update profile photo and last login
-      db.prepare(`
-        UPDATE users SET profilePhoto = ?, lastLoginAt = datetime('now'), updatedAt = datetime('now')
+      await db.prepare(`
+        UPDATE users SET profilephoto = ?, lastloginat = NOW(), updatedat = NOW()
         WHERE id = ?
       `).run(profilePhoto, user.id);
-      user = db.prepare('SELECT * FROM users WHERE id = ?').get(user.id) as User;
+      user = await db.prepare('SELECT * FROM users WHERE id = ?').get(user.id) as User;
     } else {
       // Create new user with 'user' role (first user becomes admin)
-      const userCount = db.prepare('SELECT COUNT(*) as count FROM users').get() as { count: number };
-      const role = userCount.count === 0 ? 'admin' : 'user';
+      const userCount = await db.prepare('SELECT COUNT(*) as count FROM users').get() as { count: number };
+      const role = Number(userCount.count) === 0 ? 'admin' : 'user';
 
-      const result = db.prepare(`
-        INSERT INTO users (email, password, name, role, profilePhoto, lastLoginAt)
-        VALUES (?, ?, ?, ?, ?, datetime('now'))
+      const result = await db.prepare(`
+        INSERT INTO users (email, password, name, role, profilephoto, lastloginat)
+        VALUES (?, ?, ?, ?, ?, NOW())
       `).run(email, '', name, role, profilePhoto);
 
-      user = db.prepare('SELECT * FROM users WHERE id = ?').get(result.lastInsertRowid) as User;
+      user = await db.prepare('SELECT * FROM users WHERE id = ?').get(result.lastInsertRowid) as User;
       console.log(`New user created via Google: ${email} (${role})`);
     }
 
@@ -102,8 +102,8 @@ router.post('/google', async (req: Request, res: Response): Promise<void> => {
         email: user.email,
         name: user.name,
         role: user.role,
-        profilePhoto: user.profilePhoto,
-        lastLoginAt: user.lastLoginAt,
+        profilePhoto: user.profilephoto,
+        lastLoginAt: user.lastloginat,
       },
     });
   } catch (error) {
@@ -113,7 +113,7 @@ router.post('/google', async (req: Request, res: Response): Promise<void> => {
 });
 
 // Email/Password Login (kept for default admin)
-router.post('/login', (req: Request, res: Response): void => {
+router.post('/login', async (req: Request, res: Response): Promise<void> => {
   const { email, password }: LoginInput = req.body;
 
   if (!email || !password) {
@@ -121,53 +121,60 @@ router.post('/login', (req: Request, res: Response): void => {
     return;
   }
 
-  const user = db.prepare('SELECT * FROM users WHERE email = ?').get(email.toLowerCase()) as User | undefined;
+  try {
+    const user = await db.prepare('SELECT * FROM users WHERE email = ?').get(email.toLowerCase()) as User | undefined;
 
-  if (!user) {
-    res.status(401).json({ error: 'Invalid email or password' });
-    return;
-  }
+    if (!user) {
+      res.status(401).json({ error: 'Invalid email or password' });
+      return;
+    }
 
-  if (!user.isActive) {
-    res.status(403).json({ error: 'Account is deactivated. Contact administrator.' });
-    return;
-  }
+    // Check isactive - PostgreSQL returns bigint as string
+    const isActive = user.isactive == 1 || user.isactive === '1' || user.isactive === true;
+    if (!isActive) {
+      res.status(403).json({ error: 'Account is deactivated. Contact administrator.' });
+      return;
+    }
 
-  // If user has no password (Google-only user), reject password login
-  if (!user.password) {
-    res.status(400).json({ error: 'This account uses Google Sign-In. Please login with Google.' });
-    return;
-  }
+    // If user has no password (Google-only user), reject password login
+    if (!user.password) {
+      res.status(400).json({ error: 'This account uses Google Sign-In. Please login with Google.' });
+      return;
+    }
 
-  const validPassword = bcrypt.compareSync(password, user.password);
-  if (!validPassword) {
-    res.status(401).json({ error: 'Invalid email or password' });
-    return;
-  }
+    const validPassword = bcrypt.compareSync(password, user.password);
+    if (!validPassword) {
+      res.status(401).json({ error: 'Invalid email or password' });
+      return;
+    }
 
-  const payload: JwtPayload = {
-    userId: user.id,
-    email: user.email,
-    role: user.role,
-  };
-
-  const token = generateToken(payload);
-
-  res.cookie('token', token, {
-    httpOnly: true,
-    secure: process.env.NODE_ENV === 'production',
-    sameSite: 'lax',
-    maxAge: 24 * 60 * 60 * 1000,
-  });
-
-  res.json({
-    user: {
-      id: user.id,
+    const payload: JwtPayload = {
+      userId: user.id,
       email: user.email,
-      name: user.name,
       role: user.role,
-    },
-  });
+    };
+
+    const token = generateToken(payload);
+
+    res.cookie('token', token, {
+      httpOnly: true,
+      secure: process.env.NODE_ENV === 'production',
+      sameSite: 'lax',
+      maxAge: 24 * 60 * 60 * 1000,
+    });
+
+    res.json({
+      user: {
+        id: user.id,
+        email: user.email,
+        name: user.name,
+        role: user.role,
+      },
+    });
+  } catch (error) {
+    console.error('Login error:', error);
+    res.status(500).json({ error: 'Login failed' });
+  }
 });
 
 // Logout
@@ -177,15 +184,20 @@ router.post('/logout', (_req: Request, res: Response): void => {
 });
 
 // Get current user
-router.get('/me', authenticateToken, (req: Request, res: Response): void => {
-  const user = db.prepare('SELECT id, email, name, role, isActive, profilePhoto, lastLoginAt, createdAt FROM users WHERE id = ?').get(req.user!.userId) as User | undefined;
+router.get('/me', authenticateToken, async (req: Request, res: Response): Promise<void> => {
+  try {
+    const user = await db.prepare('SELECT id, email, name, role, isactive, profilephoto, lastloginat, createdat FROM users WHERE id = ?').get(req.user!.userId) as User | undefined;
 
-  if (!user) {
-    res.status(404).json({ error: 'User not found' });
-    return;
+    if (!user) {
+      res.status(404).json({ error: 'User not found' });
+      return;
+    }
+
+    res.json({ user });
+  } catch (error) {
+    console.error('Get user error:', error);
+    res.status(500).json({ error: 'Failed to get user' });
   }
-
-  res.json({ user });
 });
 
 export default router;

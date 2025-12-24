@@ -9,27 +9,28 @@ const router = Router();
 router.use(authenticateToken);
 
 // Get all comments for a todo with author details
-router.get('/todo/:todoId', (req: Request, res: Response): void => {
+router.get('/todo/:todoId', async (req: Request, res: Response): Promise<void> => {
   try {
-    const comments = db.prepare(`
+    const comments = await db.prepare(`
       SELECT
         c.*,
-        u.name as authorName,
-        u.email as authorEmail
+        u.name as authorname,
+        u.email as authoremail
       FROM comments c
-      JOIN users u ON c.authorId = u.id
-      WHERE c.todoId = ?
-      ORDER BY c.createdAt ASC
+      JOIN users u ON c.authorid = u.id
+      WHERE c.todoid = ?
+      ORDER BY c.createdat ASC
     `).all(req.params.todoId) as CommentWithAuthor[];
 
     res.json(comments);
   } catch (error) {
+    console.error('Fetch comments error:', error);
     res.status(500).json({ error: 'Failed to fetch comments' });
   }
 });
 
 // Create new comment
-router.post('/', (req: Request, res: Response): void => {
+router.post('/', async (req: Request, res: Response): Promise<void> => {
   try {
     const { todoId, content }: CreateCommentInput = req.body;
     const authorId = req.user!.userId;
@@ -40,24 +41,24 @@ router.post('/', (req: Request, res: Response): void => {
     }
 
     // Check if todo exists
-    const todo = db.prepare('SELECT id FROM todos WHERE id = ?').get(todoId);
+    const todo = await db.prepare('SELECT id FROM todos WHERE id = ?').get(todoId);
     if (!todo) {
       res.status(404).json({ error: 'Todo not found' });
       return;
     }
 
-    const result = db.prepare(`
-      INSERT INTO comments (todoId, authorId, content)
+    const result = await db.prepare(`
+      INSERT INTO comments (todoid, authorid, content)
       VALUES (?, ?, ?)
     `).run(todoId, authorId, content);
 
-    const newComment = db.prepare(`
+    const newComment = await db.prepare(`
       SELECT
         c.*,
-        u.name as authorName,
-        u.email as authorEmail
+        u.name as authorname,
+        u.email as authoremail
       FROM comments c
-      JOIN users u ON c.authorId = u.id
+      JOIN users u ON c.authorid = u.id
       WHERE c.id = ?
     `).get(result.lastInsertRowid) as CommentWithAuthor;
 
@@ -69,9 +70,9 @@ router.post('/', (req: Request, res: Response): void => {
 });
 
 // Delete comment (only author or admin can delete)
-router.delete('/:id', (req: Request, res: Response): void => {
+router.delete('/:id', async (req: Request, res: Response): Promise<void> => {
   try {
-    const comment = db.prepare('SELECT * FROM comments WHERE id = ?').get(req.params.id) as any;
+    const comment = await db.prepare('SELECT * FROM comments WHERE id = ?').get(req.params.id) as any;
 
     if (!comment) {
       res.status(404).json({ error: 'Comment not found' });
@@ -79,14 +80,15 @@ router.delete('/:id', (req: Request, res: Response): void => {
     }
 
     // Only author or admin can delete
-    if (comment.authorId !== req.user!.userId && req.user!.role !== 'admin') {
+    if (comment.authorid !== req.user!.userId && req.user!.role !== 'admin') {
       res.status(403).json({ error: 'Not authorized to delete this comment' });
       return;
     }
 
-    db.prepare('DELETE FROM comments WHERE id = ?').run(req.params.id);
+    await db.prepare('DELETE FROM comments WHERE id = ?').run(req.params.id);
     res.status(204).send();
   } catch (error) {
+    console.error('Delete comment error:', error);
     res.status(500).json({ error: 'Failed to delete comment' });
   }
 });
