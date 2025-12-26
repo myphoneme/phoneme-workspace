@@ -2,8 +2,9 @@ import { useState } from 'react';
 import { useUsers, useUpdateUser } from '../hooks/useUsers';
 import { useSetting, useUpdateSetting } from '../hooks/useSettings';
 import { useProjects, useCreateProject, useUpdateProject } from '../hooks/useProjects';
+import { useTodos, useUpdateTodo, useDeleteTodo } from '../hooks/useTodos';
 import { useWorkspaceSyncAction, useWorkspaceSyncStatus } from '../hooks/useWorkspaceSync';
-import type { User, Project } from '../types';
+import type { User, Project, Todo, UpdateTodoInput } from '../types';
 import type { FormEvent } from 'react';
 
 interface AdminPanelProps {
@@ -11,7 +12,7 @@ interface AdminPanelProps {
 }
 
 export function AdminPanel({ onBack }: AdminPanelProps) {
-  const [activeTab, setActiveTab] = useState<'users' | 'projects' | 'settings'>('users');
+  const [activeTab, setActiveTab] = useState<'users' | 'projects' | 'tasks' | 'settings'>('users');
 
   return (
     <div className="min-h-screen bg-gray-50">
@@ -70,6 +71,16 @@ export function AdminPanel({ onBack }: AdminPanelProps) {
                 Projects
               </button>
               <button
+                onClick={() => setActiveTab('tasks')}
+                className={`px-6 py-4 font-medium transition-colors ${
+                  activeTab === 'tasks'
+                    ? 'text-orange-600 border-b-2 border-orange-500'
+                    : 'text-gray-500 hover:text-gray-700'
+                }`}
+              >
+                Tasks
+              </button>
+              <button
                 onClick={() => setActiveTab('settings')}
                 className={`px-6 py-4 font-medium transition-colors ${
                   activeTab === 'settings'
@@ -83,7 +94,15 @@ export function AdminPanel({ onBack }: AdminPanelProps) {
           </div>
 
           <div className="p-6">
-            {activeTab === 'users' ? <UsersTab /> : activeTab === 'projects' ? <ProjectsTab /> : <SettingsTab />}
+            {activeTab === 'users' ? (
+              <UsersTab />
+            ) : activeTab === 'projects' ? (
+              <ProjectsTab />
+            ) : activeTab === 'tasks' ? (
+              <TasksTab />
+            ) : (
+              <SettingsTab />
+            )}
           </div>
         </div>
       </div>
@@ -534,6 +553,353 @@ function ProjectsTab() {
           ))
         )}
       </div>
+    </div>
+  );
+}
+
+function TasksTab() {
+  const { data: todos, isLoading } = useTodos();
+  const { data: users } = useUsers();
+  const { data: projects } = useProjects();
+  const updateTodo = useUpdateTodo();
+  const deleteTodo = useDeleteTodo();
+  const [editingTask, setEditingTask] = useState<Todo | null>(null);
+  const [editValues, setEditValues] = useState<UpdateTodoInput>({});
+  const [deleteConfirm, setDeleteConfirm] = useState<number | null>(null);
+  const [searchQuery, setSearchQuery] = useState('');
+  const [filterStatus, setFilterStatus] = useState<'all' | 'completed' | 'pending'>('all');
+
+  const filteredTodos = todos?.filter((todo) => {
+    const matchesSearch =
+      todo.title.toLowerCase().includes(searchQuery.toLowerCase()) ||
+      todo.description.toLowerCase().includes(searchQuery.toLowerCase()) ||
+      todo.assignerName.toLowerCase().includes(searchQuery.toLowerCase()) ||
+      todo.assigneeName.toLowerCase().includes(searchQuery.toLowerCase());
+    const matchesStatus =
+      filterStatus === 'all' ||
+      (filterStatus === 'completed' && todo.completed) ||
+      (filterStatus === 'pending' && !todo.completed);
+    return matchesSearch && matchesStatus;
+  });
+
+  const startEdit = (task: Todo) => {
+    setEditingTask(task);
+    setEditValues({
+      title: task.title,
+      description: task.description,
+      assigneeId: task.assigneeId,
+      projectId: task.projectId,
+      priority: task.priority,
+      completed: task.completed,
+      dueDate: task.dueDate || '',
+    });
+  };
+
+  const handleUpdate = async () => {
+    if (!editingTask) return;
+    try {
+      await updateTodo.mutateAsync({ id: editingTask.id, data: editValues });
+      setEditingTask(null);
+      setEditValues({});
+    } catch (err) {
+      alert(err instanceof Error ? err.message : 'Failed to update task');
+    }
+  };
+
+  const handleDelete = async (taskId: number) => {
+    try {
+      await deleteTodo.mutateAsync(taskId);
+      setDeleteConfirm(null);
+    } catch (err) {
+      alert(err instanceof Error ? err.message : 'Failed to delete task');
+    }
+  };
+
+  const getPriorityColor = (priority: string) => {
+    switch (priority) {
+      case 'high':
+        return 'bg-red-100 text-red-700';
+      case 'medium':
+        return 'bg-yellow-100 text-yellow-700';
+      case 'low':
+        return 'bg-green-100 text-green-700';
+      default:
+        return 'bg-gray-100 text-gray-700';
+    }
+  };
+
+  if (isLoading) {
+    return (
+      <div className="flex items-center justify-center py-12">
+        <div className="w-8 h-8 border-4 border-orange-500 border-t-transparent rounded-full animate-spin"></div>
+      </div>
+    );
+  }
+
+  return (
+    <div>
+      <div className="mb-6">
+        <h2 className="text-xl font-semibold text-gray-900">Task Management</h2>
+        <p className="text-sm text-gray-500 mt-1">
+          View, edit, and delete all tasks. Use this to clean up mistakenly created tasks.
+        </p>
+      </div>
+
+      {/* Search and Filter */}
+      <div className="flex flex-col md:flex-row gap-4 mb-6">
+        <div className="flex-1">
+          <input
+            type="text"
+            placeholder="Search tasks by title, description, or user..."
+            value={searchQuery}
+            onChange={(e) => setSearchQuery(e.target.value)}
+            className="w-full px-4 py-2.5 border border-gray-300 rounded-lg focus:ring-2 focus:ring-orange-500 focus:border-orange-500"
+          />
+        </div>
+        <select
+          value={filterStatus}
+          onChange={(e) => setFilterStatus(e.target.value as 'all' | 'completed' | 'pending')}
+          className="px-4 py-2.5 border border-gray-300 rounded-lg focus:ring-2 focus:ring-orange-500 focus:border-orange-500"
+        >
+          <option value="all">All Tasks ({todos?.length || 0})</option>
+          <option value="pending">Pending ({todos?.filter((t) => !t.completed).length || 0})</option>
+          <option value="completed">Completed ({todos?.filter((t) => t.completed).length || 0})</option>
+        </select>
+      </div>
+
+      {/* Task List */}
+      {filteredTodos?.length === 0 ? (
+        <div className="text-center py-12 bg-gray-50 rounded-xl border border-dashed border-gray-200">
+          <svg className="w-12 h-12 text-gray-400 mx-auto mb-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2" />
+          </svg>
+          <p className="text-gray-600">No tasks found</p>
+          <p className="text-sm text-gray-500 mt-1">
+            {searchQuery ? 'Try adjusting your search query' : 'No tasks have been created yet'}
+          </p>
+        </div>
+      ) : (
+        <div className="overflow-x-auto">
+          <table className="w-full">
+            <thead>
+              <tr className="border-b border-gray-200 bg-gray-50">
+                <th className="px-4 py-3 text-left text-sm font-medium text-gray-500">Task</th>
+                <th className="px-4 py-3 text-left text-sm font-medium text-gray-500">Assigner</th>
+                <th className="px-4 py-3 text-left text-sm font-medium text-gray-500">Assignee</th>
+                <th className="px-4 py-3 text-left text-sm font-medium text-gray-500">Project</th>
+                <th className="px-4 py-3 text-left text-sm font-medium text-gray-500">Priority</th>
+                <th className="px-4 py-3 text-left text-sm font-medium text-gray-500">Status</th>
+                <th className="px-4 py-3 text-left text-sm font-medium text-gray-500">Actions</th>
+              </tr>
+            </thead>
+            <tbody className="divide-y divide-gray-100">
+              {filteredTodos?.map((task) => (
+                <tr key={task.id} className="hover:bg-gray-50">
+                  <td className="px-4 py-4">
+                    <div>
+                      <p className="font-medium text-gray-900">{task.title}</p>
+                      <p className="text-sm text-gray-500 truncate max-w-xs">{task.description}</p>
+                      <p className="text-xs text-gray-400 mt-1">
+                        Created: {new Date(task.createdAt).toLocaleDateString()}
+                      </p>
+                    </div>
+                  </td>
+                  <td className="px-4 py-4">
+                    <p className="text-sm text-gray-900">{task.assignerName}</p>
+                    <p className="text-xs text-gray-500">{task.assignerEmail}</p>
+                  </td>
+                  <td className="px-4 py-4">
+                    <p className="text-sm text-gray-900">{task.assigneeName}</p>
+                    <p className="text-xs text-gray-500">{task.assigneeEmail}</p>
+                  </td>
+                  <td className="px-4 py-4">
+                    <span className="inline-flex items-center gap-1 text-sm text-gray-700">
+                      {task.projectIcon && <span>{task.projectIcon}</span>}
+                      {task.projectName}
+                    </span>
+                  </td>
+                  <td className="px-4 py-4">
+                    <span className={`px-2 py-1 text-xs rounded-full capitalize ${getPriorityColor(task.priority)}`}>
+                      {task.priority}
+                    </span>
+                  </td>
+                  <td className="px-4 py-4">
+                    <span
+                      className={`px-2 py-1 text-xs rounded-full ${
+                        task.completed ? 'bg-green-100 text-green-700' : 'bg-blue-100 text-blue-700'
+                      }`}
+                    >
+                      {task.completed ? 'Completed' : 'Pending'}
+                    </span>
+                  </td>
+                  <td className="px-4 py-4">
+                    <div className="flex items-center gap-2">
+                      <button
+                        onClick={() => startEdit(task)}
+                        className="px-3 py-1.5 text-sm bg-blue-50 text-blue-600 rounded-lg hover:bg-blue-100 transition-colors"
+                      >
+                        Edit
+                      </button>
+                      <button
+                        onClick={() => setDeleteConfirm(task.id)}
+                        className="px-3 py-1.5 text-sm bg-red-50 text-red-600 rounded-lg hover:bg-red-100 transition-colors"
+                      >
+                        Delete
+                      </button>
+                    </div>
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      )}
+
+      {/* Edit Modal */}
+      {editingTask && (
+        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
+          <div className="bg-white rounded-xl shadow-xl max-w-2xl w-full max-h-[90vh] overflow-y-auto">
+            <div className="p-6 border-b border-gray-200">
+              <h3 className="text-lg font-semibold text-gray-900">Edit Task</h3>
+              <p className="text-sm text-gray-500 mt-1">Task #{editingTask.id}</p>
+            </div>
+            <div className="p-6 space-y-4">
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">Title</label>
+                <input
+                  type="text"
+                  value={editValues.title || ''}
+                  onChange={(e) => setEditValues({ ...editValues, title: e.target.value })}
+                  className="w-full px-4 py-2.5 border border-gray-300 rounded-lg focus:ring-2 focus:ring-orange-500 focus:border-orange-500"
+                />
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">Description</label>
+                <textarea
+                  value={editValues.description || ''}
+                  onChange={(e) => setEditValues({ ...editValues, description: e.target.value })}
+                  rows={3}
+                  className="w-full px-4 py-2.5 border border-gray-300 rounded-lg focus:ring-2 focus:ring-orange-500 focus:border-orange-500"
+                />
+              </div>
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">Assignee</label>
+                  <select
+                    value={editValues.assigneeId || ''}
+                    onChange={(e) => setEditValues({ ...editValues, assigneeId: Number(e.target.value) })}
+                    className="w-full px-4 py-2.5 border border-gray-300 rounded-lg focus:ring-2 focus:ring-orange-500 focus:border-orange-500"
+                  >
+                    {users?.filter((u) => u.isActive).map((user) => (
+                      <option key={user.id} value={user.id}>
+                        {user.name} ({user.email})
+                      </option>
+                    ))}
+                  </select>
+                </div>
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">Project</label>
+                  <select
+                    value={editValues.projectId || ''}
+                    onChange={(e) => setEditValues({ ...editValues, projectId: Number(e.target.value) })}
+                    className="w-full px-4 py-2.5 border border-gray-300 rounded-lg focus:ring-2 focus:ring-orange-500 focus:border-orange-500"
+                  >
+                    {projects?.map((project) => (
+                      <option key={project.id} value={project.id}>
+                        {project.icon} {project.name}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">Priority</label>
+                  <select
+                    value={editValues.priority || 'medium'}
+                    onChange={(e) => setEditValues({ ...editValues, priority: e.target.value as 'low' | 'medium' | 'high' })}
+                    className="w-full px-4 py-2.5 border border-gray-300 rounded-lg focus:ring-2 focus:ring-orange-500 focus:border-orange-500"
+                  >
+                    <option value="low">Low</option>
+                    <option value="medium">Medium</option>
+                    <option value="high">High</option>
+                  </select>
+                </div>
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">Due Date</label>
+                  <input
+                    type="date"
+                    value={editValues.dueDate || ''}
+                    onChange={(e) => setEditValues({ ...editValues, dueDate: e.target.value })}
+                    className="w-full px-4 py-2.5 border border-gray-300 rounded-lg focus:ring-2 focus:ring-orange-500 focus:border-orange-500"
+                  />
+                </div>
+              </div>
+              <div className="flex items-center gap-3">
+                <label className="flex items-center gap-2 cursor-pointer">
+                  <input
+                    type="checkbox"
+                    checked={editValues.completed || false}
+                    onChange={(e) => setEditValues({ ...editValues, completed: e.target.checked })}
+                    className="w-4 h-4 rounded border-gray-300 text-orange-500 focus:ring-orange-500"
+                  />
+                  <span className="text-sm text-gray-700">Mark as completed</span>
+                </label>
+              </div>
+            </div>
+            <div className="p-6 border-t border-gray-200 flex justify-end gap-3">
+              <button
+                onClick={() => {
+                  setEditingTask(null);
+                  setEditValues({});
+                }}
+                className="px-4 py-2 text-gray-700 bg-gray-100 rounded-lg hover:bg-gray-200 transition-colors"
+              >
+                Cancel
+              </button>
+              <button
+                onClick={handleUpdate}
+                disabled={updateTodo.isPending}
+                className="px-4 py-2 bg-orange-500 text-white rounded-lg hover:bg-orange-600 transition-colors disabled:opacity-50"
+              >
+                {updateTodo.isPending ? 'Saving...' : 'Save Changes'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Delete Confirmation Modal */}
+      {deleteConfirm !== null && (
+        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
+          <div className="bg-white rounded-xl shadow-xl max-w-md w-full">
+            <div className="p-6">
+              <div className="w-12 h-12 bg-red-100 rounded-full flex items-center justify-center mx-auto mb-4">
+                <svg className="w-6 h-6 text-red-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" />
+                </svg>
+              </div>
+              <h3 className="text-lg font-semibold text-gray-900 text-center mb-2">Delete Task?</h3>
+              <p className="text-gray-600 text-center text-sm mb-6">
+                This will permanently delete this task and all associated comments. This action cannot be undone.
+              </p>
+              <div className="flex gap-3">
+                <button
+                  onClick={() => setDeleteConfirm(null)}
+                  className="flex-1 px-4 py-2 text-gray-700 bg-gray-100 rounded-lg hover:bg-gray-200 transition-colors"
+                >
+                  Cancel
+                </button>
+                <button
+                  onClick={() => handleDelete(deleteConfirm)}
+                  disabled={deleteTodo.isPending}
+                  className="flex-1 px-4 py-2 bg-red-600 text-white rounded-lg hover:bg-red-700 transition-colors disabled:opacity-50"
+                >
+                  {deleteTodo.isPending ? 'Deleting...' : 'Delete Task'}
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

@@ -1,8 +1,9 @@
-import { useMemo, useState } from 'react';
+import { useMemo, useState, useEffect } from 'react';
 import { useAuth } from './contexts/AuthContext';
 import { LoginPage } from './components/LoginPage';
 import { TaskManager } from './components/TaskManager';
 import { AdminPanel } from './components/AdminPanel';
+import { FinancialInsights, PublicFinancialInsights } from './components/FinancialInsights';
 import { Sidebar, Header } from './components/layout';
 import { AIAssistant } from './components/AIAssistant';
 import { Messages } from './components/Messages';
@@ -13,6 +14,24 @@ function App() {
   const [currentPage, setCurrentPage] = useState('tasks');
   const [showAIChat, setShowAIChat] = useState(false);
   const [showMessages, setShowMessages] = useState(false);
+
+  // Check for public financial insights route
+  const isPublicFinancialsRoute = window.location.pathname === '/financials/public';
+
+  // Handle browser navigation for public route
+  useEffect(() => {
+    const handlePopState = () => {
+      // Force re-render when navigating
+      window.location.reload();
+    };
+    window.addEventListener('popstate', handlePopState);
+    return () => window.removeEventListener('popstate', handlePopState);
+  }, []);
+
+  // Render public financial insights without authentication
+  if (isPublicFinancialsRoute) {
+    return <PublicFinancialInsights />;
+  }
 
   if (isLoading) {
     return (
@@ -40,6 +59,11 @@ function App() {
   // Render admin panel if selected
   if (currentPage === 'admin' && isAdmin) {
     return <AdminPanel onBack={() => setCurrentPage('tasks')} />;
+  }
+
+  // Render financial insights if selected (admin only)
+  if (currentPage === 'financials' && isAdmin) {
+    return <FinancialInsights onBack={() => setCurrentPage('tasks')} />;
   }
 
   // Main app with sidebar

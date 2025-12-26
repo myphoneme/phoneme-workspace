@@ -10,11 +10,7 @@ export default defineConfig({
     allowedHosts: ['api.phoneme.in', 'phoneme.in'],
   },
   server: {
-    host: '10.100.60.111',
+    host: 'localhost',
     port: 5173,
-    https: {
-      key: './certs/key.pem',
-      cert: './certs/cert.pem',
-    },
   },
 })
