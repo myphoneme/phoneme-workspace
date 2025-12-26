@@ -4,11 +4,11 @@ export interface User {
   password: string;
   name: string;
   role: 'admin' | 'user';
-  isActive: boolean;
-  profilePhoto?: string;
-  lastLoginAt?: string;
-  createdAt: string;
-  updatedAt: string;
+  isactive: number | string | boolean;  // PostgreSQL bigint returns as string
+  profilephoto?: string;
+  lastloginat?: string;
+  createdat: string;
+  updatedat: string;
 }
 
 export interface UserResponse {
@@ -16,60 +16,60 @@ export interface UserResponse {
   email: string;
   name: string;
   role: 'admin' | 'user';
-  isActive: boolean;
-  profilePhoto?: string;
-  lastLoginAt?: string;
-  createdAt: string;
-  updatedAt: string;
+  isactive: number | string | boolean;
+  profilephoto?: string;
+  lastloginat?: string;
+  createdat: string;
+  updatedat: string;
 }
 
 export interface Notification {
   id: number;
-  userId: number;
+  userid: number;
   type: 'task_assigned' | 'task_completed' | 'comment_added' | 'mention' | 'system';
   title: string;
   message: string;
-  relatedId?: number;
-  isRead: boolean;
-  createdAt: string;
+  relatedid?: number;
+  isread: number | string | boolean;
+  createdat: string;
 }
 
 export interface Todo {
   id: number;
   title: string;
   description: string;
-  assignerId: number;
-  assigneeId: number;
-  projectId: number;
-  completed: boolean;
+  assignerid: number;
+  assigneeid: number;
+  projectid: number;
+  completed: number | string | boolean;
   priority: 'low' | 'medium' | 'high';
-  isFavorite: boolean;
-  dueDate?: string;
-  createdAt: string;
-  updatedAt: string;
+  isfavorite: number | string | boolean;
+  duedate?: string;
+  createdat: string;
+  updatedat: string;
 }
 
 export interface TodoWithUsers extends Todo {
-  assignerName: string;
-  assignerEmail: string;
-  assigneeName: string;
-  assigneeEmail: string;
-  projectName: string;
-  projectDescription?: string;
-  projectIcon?: string;
+  assignername: string;
+  assigneremail: string;
+  assigneename: string;
+  assigneeemail: string;
+  projectname: string;
+  projectdescription?: string;
+  projecticon?: string;
 }
 
 export interface Comment {
   id: number;
-  todoId: number;
-  authorId: number;
+  todoid: number;
+  authorid: number;
   content: string;
-  createdAt: string;
+  createdat: string;
 }
 
 export interface CommentWithAuthor extends Comment {
-  authorName: string;
-  authorEmail: string;
+  authorname: string;
+  authoremail: string;
 }
 
 export interface CreateTodoInput {
@@ -117,8 +117,8 @@ export interface Project {
   name: string;
   description?: string;
   icon?: string;
-  createdAt: string;
-  updatedAt: string;
+  createdat: string;
+  updatedat: string;
 }
 
 export interface CreateProjectInput {

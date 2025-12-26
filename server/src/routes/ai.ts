@@ -10,6 +10,9 @@ const openai = new OpenAI({
   apiKey: process.env.OPENAI_API_KEY || '',
 });
 
+// Helper to check if value is truthy (handles PostgreSQL bigint as string)
+const isTruthy = (val: any) => val == 1 || val === '1' || val === true;
+
 // Define tools for task operations (OpenAI format)
 const tools: OpenAI.Chat.Completions.ChatCompletionTool[] = [
   {
@@ -133,15 +136,15 @@ const tools: OpenAI.Chat.Completions.ChatCompletionTool[] = [
 ];
 
 // Tool execution functions
-function executeListTasks(userId: number, args: { filter?: string; limit?: number }) {
+async function executeListTasks(userId: number, args: { filter?: string; limit?: number }) {
   const limit = args.limit || 10;
   let query = `
     SELECT t.*,
-           assigner.name as assignerName, assigner.email as assignerEmail,
-           assignee.name as assigneeName, assignee.email as assigneeEmail
+           assigner.name as assignername, assigner.email as assigneremail,
+           assignee.name as assigneename, assignee.email as assigneeemail
     FROM todos t
-    JOIN users assigner ON t.assignerId = assigner.id
-    JOIN users assignee ON t.assigneeId = assignee.id
+    JOIN users assigner ON t.assignerid = assigner.id
+    JOIN users assignee ON t.assigneeid = assignee.id
   `;
 
   const params: (number | string)[] = [];
@@ -155,11 +158,11 @@ function executeListTasks(userId: number, args: { filter?: string; limit?: numbe
       break;
     case 'my_tasks':
     case 'assigned_to_me':
-      query += ' WHERE t.assigneeId = ?';
+      query += ' WHERE t.assigneeid = ?';
       params.push(userId);
       break;
     case 'created_by_me':
-      query += ' WHERE t.assignerId = ?';
+      query += ' WHERE t.assignerid = ?';
       params.push(userId);
       break;
     default:
@@ -167,32 +170,32 @@ function executeListTasks(userId: number, args: { filter?: string; limit?: numbe
       break;
   }
 
-  query += ' ORDER BY t.createdAt DESC LIMIT ?';
+  query += ' ORDER BY t.createdat DESC LIMIT ?';
   params.push(limit);
 
-  const tasks = db.prepare(query).all(...params) as TodoWithUsers[];
+  const tasks = await db.prepare(query).all(...params) as TodoWithUsers[];
   return tasks.map(t => ({
     id: t.id,
     title: t.title,
     description: t.description,
-    status: t.completed ? 'completed' : 'pending',
+    status: isTruthy(t.completed) ? 'completed' : 'pending',
     priority: t.priority,
-    assignedTo: t.assigneeName,
-    createdBy: t.assignerName,
-    createdAt: t.createdAt,
+    assignedTo: t.assigneename,
+    createdBy: t.assignername,
+    createdAt: t.createdat,
   }));
 }
 
-function executeCreateTask(userId: number, args: { title: string; description?: string; assignee?: string; priority?: string; due_date?: string }) {
+async function executeCreateTask(userId: number, args: { title: string; description?: string; assignee?: string; priority?: string; due_date?: string }) {
   let assigneeId = userId;
 
   if (args.assignee) {
     // Search by email first, then by name (case-insensitive partial match)
-    let assignee = db.prepare('SELECT id FROM users WHERE LOWER(email) = LOWER(?)').get(args.assignee) as { id: number } | undefined;
+    let assignee = await db.prepare('SELECT id FROM users WHERE LOWER(email) = LOWER(?)').get(args.assignee) as { id: number } | undefined;
 
     if (!assignee) {
       // Try matching by name (partial, case-insensitive)
-      assignee = db.prepare('SELECT id FROM users WHERE LOWER(name) LIKE LOWER(?)').get(`%${args.assignee}%`) as { id: number } | undefined;
+      assignee = await db.prepare('SELECT id FROM users WHERE LOWER(name) LIKE LOWER(?)').get(`%${args.assignee}%`) as { id: number } | undefined;
     }
 
     if (!assignee) {
@@ -201,14 +204,14 @@ function executeCreateTask(userId: number, args: { title: string; description?: 
     assigneeId = assignee.id;
   }
 
-  const defaultProject = db.prepare('SELECT id FROM projects WHERE name = ?').get('Office Tasks') as { id: number } | undefined;
+  const defaultProject = await db.prepare('SELECT id FROM projects WHERE name = ?').get('Office Tasks') as { id: number } | undefined;
   const projectId = defaultProject?.id;
   if (!projectId) {
     return { error: 'Default project not configured' };
   }
 
-  const result = db.prepare(`
-    INSERT INTO todos (title, description, assignerId, assigneeId, projectId, priority, dueDate)
+  const result = await db.prepare(`
+    INSERT INTO todos (title, description, assignerid, assigneeid, projectid, priority, duedate)
     VALUES (?, ?, ?, ?, ?, ?, ?)
   `).run(
     args.title,
@@ -220,43 +223,43 @@ function executeCreateTask(userId: number, args: { title: string; description?: 
     args.due_date || null
   );
 
-  const task = db.prepare(`
-    SELECT t.*, assignee.name as assigneeName
+  const task = await db.prepare(`
+    SELECT t.*, assignee.name as assigneename
     FROM todos t
-    JOIN users assignee ON t.assigneeId = assignee.id
+    JOIN users assignee ON t.assigneeid = assignee.id
     WHERE t.id = ?
-  `).get(result.lastInsertRowid) as Todo & { assigneeName: string };
+  `).get(result.lastInsertRowid) as Todo & { assigneename: string };
 
   return {
     success: true,
     task: {
       id: task.id,
       title: task.title,
-      assignedTo: task.assigneeName,
+      assignedTo: task.assigneename,
       priority: task.priority,
-      dueDate: task.dueDate,
+      dueDate: task.duedate,
     },
   };
 }
 
-function executeCompleteTask(userId: number, args: { task_id?: number; task_title?: string }) {
+async function executeCompleteTask(userId: number, args: { task_id?: number; task_title?: string }) {
   let task: Todo | undefined;
 
   if (args.task_id) {
-    task = db.prepare('SELECT * FROM todos WHERE id = ?').get(args.task_id) as Todo | undefined;
+    task = await db.prepare('SELECT * FROM todos WHERE id = ?').get(args.task_id) as Todo | undefined;
   } else if (args.task_title) {
-    task = db.prepare('SELECT * FROM todos WHERE title LIKE ? AND completed = 0').get(`%${args.task_title}%`) as Todo | undefined;
+    task = await db.prepare('SELECT * FROM todos WHERE title LIKE ? AND completed = 0').get(`%${args.task_title}%`) as Todo | undefined;
   }
 
   if (!task) {
     return { error: 'Task not found' };
   }
 
-  if (task.completed) {
+  if (isTruthy(task.completed)) {
     return { message: 'Task is already completed' };
   }
 
-  db.prepare("UPDATE todos SET completed = 1, updatedAt = datetime('now') WHERE id = ?").run(task.id);
+  await db.prepare('UPDATE todos SET completed = 1, updatedat = NOW() WHERE id = ?').run(task.id);
 
   return {
     success: true,
@@ -264,52 +267,52 @@ function executeCompleteTask(userId: number, args: { task_id?: number; task_titl
   };
 }
 
-function executeGetTaskSummary(userId: number) {
-  const totalTasks = db.prepare('SELECT COUNT(*) as count FROM todos').get() as { count: number };
-  const pendingTasks = db.prepare('SELECT COUNT(*) as count FROM todos WHERE completed = 0').get() as { count: number };
-  const completedTasks = db.prepare('SELECT COUNT(*) as count FROM todos WHERE completed = 1').get() as { count: number };
-  const myTasks = db.prepare('SELECT COUNT(*) as count FROM todos WHERE assigneeId = ? AND completed = 0').get(userId) as { count: number };
+async function executeGetTaskSummary(userId: number) {
+  const totalTasks = await db.prepare('SELECT COUNT(*) as count FROM todos').get() as { count: number };
+  const pendingTasks = await db.prepare('SELECT COUNT(*) as count FROM todos WHERE completed = 0').get() as { count: number };
+  const completedTasks = await db.prepare('SELECT COUNT(*) as count FROM todos WHERE completed = 1').get() as { count: number };
+  const myTasks = await db.prepare('SELECT COUNT(*) as count FROM todos WHERE assigneeid = ? AND completed = 0').get(userId) as { count: number };
 
-  const byPriority = db.prepare(`
+  const byPriority = await db.prepare(`
     SELECT priority, COUNT(*) as count
     FROM todos WHERE completed = 0
     GROUP BY priority
   `).all() as Array<{ priority: string; count: number }>;
 
-  const recentTasks = db.prepare(`
-    SELECT title, completed, createdAt
+  const recentTasks = await db.prepare(`
+    SELECT title, completed, createdat
     FROM todos
-    ORDER BY createdAt DESC
+    ORDER BY createdat DESC
     LIMIT 5
-  `).all() as Array<{ title: string; completed: number; createdAt: string }>;
+  `).all() as Array<{ title: string; completed: number | string | boolean; createdat: string }>;
 
   return {
-    total: totalTasks.count,
-    pending: pendingTasks.count,
-    completed: completedTasks.count,
-    myPendingTasks: myTasks.count,
-    byPriority: byPriority.reduce((acc, p) => ({ ...acc, [p.priority]: p.count }), {}),
+    total: Number(totalTasks.count),
+    pending: Number(pendingTasks.count),
+    completed: Number(completedTasks.count),
+    myPendingTasks: Number(myTasks.count),
+    byPriority: byPriority.reduce((acc, p) => ({ ...acc, [p.priority]: Number(p.count) }), {}),
     recentTasks: recentTasks.map(t => ({
       title: t.title,
-      status: t.completed ? 'completed' : 'pending',
-      createdAt: t.createdAt,
+      status: isTruthy(t.completed) ? 'completed' : 'pending',
+      createdAt: t.createdat,
     })),
   };
 }
 
-function executeListUsers() {
-  const users = db.prepare('SELECT id, name, email, role FROM users WHERE isActive = 1').all() as Array<{ id: number; name: string; email: string; role: string }>;
+async function executeListUsers() {
+  const users = await db.prepare('SELECT id, name, email, role FROM users WHERE isactive = 1').all() as Array<{ id: number; name: string; email: string; role: string }>;
   return users;
 }
 
-function executeSearchTasks(args: { query: string }) {
-  const tasks = db.prepare(`
+async function executeSearchTasks(args: { query: string }) {
+  const tasks = await db.prepare(`
     SELECT t.id, t.title, t.description, t.completed, t.priority,
-           assignee.name as assigneeName
+           assignee.name as assigneename
     FROM todos t
-    JOIN users assignee ON t.assigneeId = assignee.id
+    JOIN users assignee ON t.assigneeid = assignee.id
     WHERE t.title LIKE ? OR t.description LIKE ?
-    ORDER BY t.createdAt DESC
+    ORDER BY t.createdat DESC
     LIMIT 10
   `).all(`%${args.query}%`, `%${args.query}%`) as Array<any>;
 
@@ -317,34 +320,34 @@ function executeSearchTasks(args: { query: string }) {
     id: t.id,
     title: t.title,
     description: t.description,
-    status: t.completed ? 'completed' : 'pending',
+    status: isTruthy(t.completed) ? 'completed' : 'pending',
     priority: t.priority,
-    assignedTo: t.assigneeName,
+    assignedTo: t.assigneename,
   }));
 }
 
 // Process tool calls
-function processToolCall(toolName: string, toolInput: any, userId: number): string {
+async function processToolCall(toolName: string, toolInput: any, userId: number): Promise<string> {
   let result: any;
 
   switch (toolName) {
     case 'list_tasks':
-      result = executeListTasks(userId, toolInput);
+      result = await executeListTasks(userId, toolInput);
       break;
     case 'create_task':
-      result = executeCreateTask(userId, toolInput);
+      result = await executeCreateTask(userId, toolInput);
       break;
     case 'complete_task':
-      result = executeCompleteTask(userId, toolInput);
+      result = await executeCompleteTask(userId, toolInput);
       break;
     case 'get_task_summary':
-      result = executeGetTaskSummary(userId);
+      result = await executeGetTaskSummary(userId);
       break;
     case 'list_users':
-      result = executeListUsers();
+      result = await executeListUsers();
       break;
     case 'search_tasks':
-      result = executeSearchTasks(toolInput);
+      result = await executeSearchTasks(toolInput);
       break;
     default:
       result = { error: `Unknown tool: ${toolName}` };
@@ -370,7 +373,7 @@ router.post('/chat', authenticateToken, async (req: Request, res: Response): Pro
 
   try {
     // Get current user info for context
-    const user = db.prepare('SELECT name, email, role FROM users WHERE id = ?').get(userId) as User;
+    const user = await db.prepare('SELECT name, email, role FROM users WHERE id = ?').get(userId) as User;
 
     const systemPrompt = `You are an AI assistant for Phoneme Workspace, a task management and team collaboration platform.
 
@@ -436,7 +439,7 @@ Always be professional and friendly. Use the user's name occasionally to persona
 
         const toolName = toolCall.function.name;
         const toolInput = JSON.parse(toolCall.function.arguments);
-        const toolResult = processToolCall(toolName, toolInput, userId);
+        const toolResult = await processToolCall(toolName, toolInput, userId);
 
         // Add tool result to messages
         messages.push({

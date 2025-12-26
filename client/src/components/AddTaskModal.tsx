@@ -2,12 +2,17 @@ import { useState, useEffect, useRef } from 'react';
 import { useCreateTodo } from '../hooks/useTodos';
 import { useActiveUsers } from '../hooks/useUsers';
 import { useAuth } from '../contexts/AuthContext';
-import { formatEstimatedTime, getEstimatedTime } from '../utils/time';
 import { useProjects } from '../hooks/useProjects';
 
 interface AddTaskModalProps {
   isOpen: boolean;
   onClose: () => void;
+}
+
+interface User {
+  id: number;
+  name: string;
+  email: string;
 }
 
 export function AddTaskModal({ isOpen, onClose }: AddTaskModalProps) {
@@ -19,10 +24,35 @@ export function AddTaskModal({ isOpen, onClose }: AddTaskModalProps) {
   const [priority, setPriority] = useState<'low' | 'medium' | 'high'>('medium');
   const [dueDate, setDueDate] = useState('');
 
+  // Searchable dropdown state
+  const [assigneeSearch, setAssigneeSearch] = useState('');
+  const [isAssigneeDropdownOpen, setIsAssigneeDropdownOpen] = useState(false);
+  const assigneeDropdownRef = useRef<HTMLDivElement>(null);
+  const assigneeInputRef = useRef<HTMLInputElement>(null);
+
   const titleInputRef = useRef<HTMLInputElement>(null);
   const createTodo = useCreateTodo();
   const { data: users, isLoading: usersLoading } = useActiveUsers();
   const { data: projects, isLoading: projectsLoading } = useProjects();
+
+  // Filter users based on search
+  const filteredUsers =
+    users?.filter(
+      (u: User) =>
+        u.name.toLowerCase().includes(assigneeSearch.toLowerCase()) ||
+        u.email.toLowerCase().includes(assigneeSearch.toLowerCase())
+    ) || [];
+
+  // Close dropdown when clicking outside
+  useEffect(() => {
+    function handleClickOutside(event: MouseEvent) {
+      if (assigneeDropdownRef.current && !assigneeDropdownRef.current.contains(event.target as Node)) {
+        setIsAssigneeDropdownOpen(false);
+      }
+    }
+    document.addEventListener('mousedown', handleClickOutside);
+    return () => document.removeEventListener('mousedown', handleClickOutside);
+  }, []);
 
   useEffect(() => {
     if (isOpen) {
@@ -32,7 +62,8 @@ export function AddTaskModal({ isOpen, onClose }: AddTaskModalProps) {
       setProjectId('');
       setPriority('medium');
       setDueDate('');
-      // Focus title input when modal opens
+      setAssigneeSearch('');
+      setIsAssigneeDropdownOpen(false);
       setTimeout(() => titleInputRef.current?.focus(), 100);
     }
   }, [isOpen]);
@@ -69,8 +100,18 @@ export function AddTaskModal({ isOpen, onClose }: AddTaskModalProps) {
 
   const handleKeyDown = (e: React.KeyboardEvent) => {
     if (e.key === 'Escape') {
-      onClose();
+      if (isAssigneeDropdownOpen) {
+        setIsAssigneeDropdownOpen(false);
+      } else {
+        onClose();
+      }
     }
+  };
+
+  const handleSelectAssignee = (selectedUser: User) => {
+    setAssigneeId(selectedUser.id);
+    setAssigneeSearch('');
+    setIsAssigneeDropdownOpen(false);
   };
 
   const getInitials = (name: string) => {
@@ -82,8 +123,7 @@ export function AddTaskModal({ isOpen, onClose }: AddTaskModalProps) {
       .slice(0, 2);
   };
 
-  const selectedUser = users?.find((u) => u.id === assigneeId);
-  const estimatedTime = formatEstimatedTime(getEstimatedTime(priority));
+  const selectedUser = users?.find((u: User) => u.id === assigneeId);
 
   if (!isOpen) return null;
 
@@ -94,288 +134,239 @@ export function AddTaskModal({ isOpen, onClose }: AddTaskModalProps) {
 
       {/* Modal */}
       <div className="flex min-h-full items-center justify-center p-4">
-        <div className="relative w-full max-w-xl bg-white rounded-2xl shadow-xl">
+        <div className="relative w-full max-w-2xl bg-white rounded-lg shadow-xl">
           {/* Header */}
-          <div className="flex items-center justify-between px-6 py-4 border-b border-gray-100">
-            <div className="flex items-center gap-3">
-              <div className="w-10 h-10 bg-orange-100 rounded-xl flex items-center justify-center">
-                <TaskIcon className="w-5 h-5 text-orange-600" />
-              </div>
-              <div>
-                <h2 className="text-lg font-semibold text-gray-900">Create Task</h2>
-                <p className="text-xs text-gray-500">Add a new task to your workflow</p>
-              </div>
-            </div>
+          <div className="flex items-center justify-between px-5 py-3 border-b border-gray-200">
+            <h2 className="text-base font-semibold text-gray-900">Create New Task</h2>
             <button
               onClick={onClose}
-              className="p-2 text-gray-400 hover:text-gray-600 hover:bg-gray-100 rounded-lg transition-colors"
+              className="p-1 text-gray-400 hover:text-gray-600 rounded transition-colors"
             >
               <CloseIcon className="w-5 h-5" />
             </button>
           </div>
 
           {/* Form */}
-          <form onSubmit={handleSubmit} className="p-6">
-            <div className="space-y-5">
-              {/* Title Input - Smart */}
+          <form onSubmit={handleSubmit} className="p-5">
+            {/* Title & Description Row */}
+            <div className="grid grid-cols-2 gap-4 mb-4">
+              {/* Title */}
               <div>
-                <label className="block text-sm font-medium text-gray-700 mb-2">
-                  What needs to be done?
+                <label className="block text-sm font-medium text-gray-700 mb-1">
+                  Title <span className="text-red-500">*</span>
                 </label>
                 <input
                   ref={titleInputRef}
                   type="text"
                   value={title}
                   onChange={(e) => setTitle(e.target.value)}
-                  className="w-full px-4 py-3 border border-gray-200 rounded-xl focus:ring-2 focus:ring-orange-500 focus:border-orange-500 transition-all text-lg"
-                  placeholder="e.g., Review quarterly report"
+                  className="w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:ring-2 focus:ring-orange-500 focus:border-orange-500 text-sm"
+                  placeholder="Enter task title"
                   required
                 />
               </div>
 
-              {/* Description with Auto-expand */}
+              {/* Project */}
               <div>
-                <label className="block text-sm font-medium text-gray-700 mb-2">
-                  Add more details
+                <label className="block text-sm font-medium text-gray-700 mb-1">
+                  Project <span className="text-red-500">*</span>
                 </label>
-                <textarea
-                  value={description}
-                  onChange={(e) => setDescription(e.target.value)}
-                  className="w-full px-4 py-3 border border-gray-200 rounded-xl focus:ring-2 focus:ring-orange-500 focus:border-orange-500 transition-all resize-none"
-                  placeholder="Describe the task, add context, or include any relevant information..."
-                  rows={3}
-                  required
-                />
+                {projectsLoading ? (
+                  <div className="flex items-center gap-2 px-3 py-2 border border-gray-300 rounded-md text-gray-400 text-sm">
+                    <LoadingSpinner className="w-4 h-4" />
+                    Loading...
+                  </div>
+                ) : (
+                  <select
+                    value={projectId}
+                    onChange={(e) => setProjectId(Number(e.target.value))}
+                    className="w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:ring-2 focus:ring-orange-500 focus:border-orange-500 text-sm"
+                  >
+                    {projects?.map((project) => (
+                      <option key={project.id} value={project.id}>
+                        {project.name}
+                      </option>
+                    ))}
+                  </select>
+                )}
               </div>
+            </div>
 
-              {/* Assignee Selection - Visual */}
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-2">
-                  Assign to
+            {/* Description - Full Width */}
+            <div className="mb-4">
+              <label className="block text-sm font-medium text-gray-700 mb-1">
+                Description <span className="text-red-500">*</span>
+              </label>
+              <textarea
+                value={description}
+                onChange={(e) => setDescription(e.target.value)}
+                className="w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:ring-2 focus:ring-orange-500 focus:border-orange-500 text-sm resize-none"
+                placeholder="Enter task description"
+                rows={2}
+                required
+              />
+            </div>
+
+            {/* Assignee, Priority, Due Date Row */}
+            <div className="grid grid-cols-3 gap-4 mb-4">
+              {/* Assignee */}
+              <div ref={assigneeDropdownRef} className="relative">
+                <label className="block text-sm font-medium text-gray-700 mb-1">
+                  Assign To <span className="text-red-500">*</span>
                 </label>
                 {usersLoading ? (
-                  <div className="flex items-center gap-2 text-gray-500">
+                  <div className="flex items-center gap-2 px-3 py-2 border border-gray-300 rounded-md text-gray-400 text-sm">
                     <LoadingSpinner className="w-4 h-4" />
-                    Loading team members...
+                    Loading users...
                   </div>
                 ) : (
-                  <div className="grid grid-cols-2 sm:grid-cols-3 gap-2">
-                    {users?.map((u) => (
-                      <button
-                        key={u.id}
-                        type="button"
-                        onClick={() => setAssigneeId(u.id)}
-                        className={`flex items-center gap-2 p-3 rounded-xl border-2 transition-all ${
-                          assigneeId === u.id
-                            ? 'border-orange-500 bg-orange-50'
-                            : 'border-gray-200 hover:border-orange-300 hover:bg-gray-50'
-                        }`}
-                      >
-                        <div
-                          className={`w-8 h-8 rounded-full flex items-center justify-center text-sm font-medium ${
-                            assigneeId === u.id
-                              ? 'bg-orange-500 text-white'
-                              : 'bg-gray-200 text-gray-600'
-                          }`}
-                        >
-                          {getInitials(u.name)}
-                        </div>
-                        <div className="text-left flex-1 min-w-0">
-                          <p className={`text-sm font-medium truncate ${assigneeId === u.id ? 'text-orange-700' : 'text-gray-900'}`}>
-                            {u.name}
-                            {u.id === user?.id && <span className="text-xs text-gray-400 ml-1">(you)</span>}
-                          </p>
-                        </div>
-                        {assigneeId === u.id && (
-                          <CheckCircleIcon className="w-5 h-5 text-orange-500 flex-shrink-0" />
-                        )}
-                      </button>
-                    ))}
-                  </div>
-                )}
-              </div>
-
-              {/* Project Selection */}
-              <div>
-                <div className="flex items-center justify-between mb-2">
-                  <label className="block text-sm font-medium text-gray-700">Project</label>
-                  <span className="text-xs text-gray-500">Office Tasks is the default workspace</span>
-                </div>
-                {projectsLoading ? (
-                  <div className="flex items-center gap-2 text-gray-500">
-                    <LoadingSpinner className="w-4 h-4" />
-                    Loading projects...
-                  </div>
-                ) : (
-                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
-                    {projects?.map((project) => (
-                      <button
-                        key={project.id}
-                        type="button"
-                        onClick={() => setProjectId(project.id)}
-                        className={`flex items-start gap-3 p-3 rounded-xl border-2 text-left transition-all ${
-                          projectId === project.id
-                            ? 'border-orange-500 bg-orange-50'
-                            : 'border-gray-200 hover:border-orange-300 hover:bg-gray-50'
-                        }`}
-                      >
-                        <div className="w-10 h-10 rounded-full bg-orange-100 flex items-center justify-center text-lg">
-                          {project.icon || '📁'}
-                        </div>
-                        <div className="space-y-0.5">
-                          <p className="text-sm font-semibold text-gray-900 flex items-center gap-2">
-                            {project.name}
-                            {project.name === 'Office Tasks' && (
-                              <span className="text-[10px] uppercase tracking-wide bg-gray-100 text-gray-600 px-2 py-0.5 rounded-full">
-                                Default
-                              </span>
-                            )}
-                          </p>
-                          <p className="text-xs text-gray-500 line-clamp-2">
-                            {project.description || 'No description'}
-                          </p>
-                        </div>
-                        {projectId === project.id && (
-                          <CheckCircleIcon className="w-5 h-5 text-orange-500 ml-auto" />
-                        )}
-                      </button>
-                    ))}
-                  </div>
-                )}
-              </div>
-
-              {/* Priority Selection - Visual */}
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-2">
-                  Priority & Timeline
-                </label>
-                <div className="grid grid-cols-3 gap-3">
-                  <button
-                    type="button"
-                    onClick={() => setPriority('low')}
-                    className={`p-3 rounded-xl border-2 transition-all text-center ${
-                      priority === 'low'
-                        ? 'border-blue-500 bg-blue-50'
-                        : 'border-gray-200 hover:border-blue-300'
-                    }`}
-                  >
-                    <div className={`w-3 h-3 rounded-full mx-auto mb-2 ${priority === 'low' ? 'bg-blue-500' : 'bg-blue-300'}`} />
-                    <p className={`font-medium ${priority === 'low' ? 'text-blue-700' : 'text-gray-700'}`}>Low</p>
-                    <p className="text-xs text-gray-500 mt-0.5">~2 hours</p>
-                  </button>
-
-                  <button
-                    type="button"
-                    onClick={() => setPriority('medium')}
-                    className={`p-3 rounded-xl border-2 transition-all text-center ${
-                      priority === 'medium'
-                        ? 'border-yellow-500 bg-yellow-50'
-                        : 'border-gray-200 hover:border-yellow-300'
-                    }`}
-                  >
-                    <div className={`w-3 h-3 rounded-full mx-auto mb-2 ${priority === 'medium' ? 'bg-yellow-500' : 'bg-yellow-300'}`} />
-                    <p className={`font-medium ${priority === 'medium' ? 'text-yellow-700' : 'text-gray-700'}`}>Medium</p>
-                    <p className="text-xs text-gray-500 mt-0.5">~1 hour</p>
-                  </button>
-
-                  <button
-                    type="button"
-                    onClick={() => setPriority('high')}
-                    className={`p-3 rounded-xl border-2 transition-all text-center ${
-                      priority === 'high'
-                        ? 'border-red-500 bg-red-50'
-                        : 'border-gray-200 hover:border-red-300'
-                    }`}
-                  >
-                    <div className={`w-3 h-3 rounded-full mx-auto mb-2 ${priority === 'high' ? 'bg-red-500' : 'bg-red-300'}`} />
-                    <p className={`font-medium ${priority === 'high' ? 'text-red-700' : 'text-gray-700'}`}>High</p>
-                    <p className="text-xs text-gray-500 mt-0.5">~30 mins</p>
-                  </button>
-                </div>
-              </div>
-
-              {/* Due Date/Deadline */}
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-2">
-                  Due Date (Optional)
-                </label>
-                <div className="flex items-center gap-3">
-                  <div className="relative flex-1">
-                    <CalendarIcon className="absolute left-3 top-1/2 -translate-y-1/2 w-5 h-5 text-gray-400" />
-                    <input
-                      type="datetime-local"
-                      value={dueDate}
-                      onChange={(e) => setDueDate(e.target.value)}
-                      className="w-full pl-10 pr-4 py-3 border border-gray-200 rounded-xl focus:ring-2 focus:ring-orange-500 focus:border-orange-500 transition-all"
-                    />
-                  </div>
-                  {dueDate && (
-                    <button
-                      type="button"
-                      onClick={() => setDueDate('')}
-                      className="p-2 text-gray-400 hover:text-red-500 hover:bg-red-50 rounded-lg transition-colors"
-                      title="Clear deadline"
+                  <>
+                    <div
+                      className={`flex items-center gap-2 px-3 py-2 border rounded-md shadow-sm cursor-text transition-colors ${
+                        isAssigneeDropdownOpen
+                          ? 'border-orange-500 ring-2 ring-orange-500'
+                          : 'border-gray-300 hover:border-gray-400'
+                      }`}
+                      onClick={() => assigneeInputRef.current?.focus()}
                     >
-                      <CloseIcon className="w-5 h-5" />
-                    </button>
-                  )}
-                </div>
-                <p className="text-xs text-gray-500 mt-1">
-                  Set a deadline to track task progress more accurately
-                </p>
-              </div>
+                      {selectedUser && !assigneeSearch ? (
+                        <>
+                          <div className="w-6 h-6 rounded-full bg-orange-500 flex items-center justify-center text-[10px] font-medium text-white">
+                            {getInitials(selectedUser.name)}
+                          </div>
+                          <span className="text-sm text-gray-900 flex-1">{selectedUser.name}</span>
+                          <button
+                            type="button"
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              setAssigneeId('');
+                              setAssigneeSearch('');
+                            }}
+                            className="p-0.5 text-gray-400 hover:text-gray-600"
+                          >
+                            <CloseIcon className="w-4 h-4" />
+                          </button>
+                        </>
+                      ) : (
+                        <>
+                          <SearchIcon className="w-4 h-4 text-gray-400" />
+                          <input
+                            ref={assigneeInputRef}
+                            type="text"
+                            value={assigneeSearch}
+                            onChange={(e) => {
+                              setAssigneeSearch(e.target.value);
+                              setIsAssigneeDropdownOpen(true);
+                            }}
+                            onFocus={() => setIsAssigneeDropdownOpen(true)}
+                            className="flex-1 text-sm outline-none placeholder-gray-400"
+                            placeholder="Search by name or email..."
+                          />
+                        </>
+                      )}
+                    </div>
 
-              {/* Preview Card */}
-              {title && assigneeId && (
-                <div className="bg-gray-50 rounded-xl p-4 border border-gray-200">
-                  <p className="text-xs text-gray-500 uppercase tracking-wider mb-2">Preview</p>
-                  <div className="flex items-start gap-3">
-                    <div className={`w-1 h-12 rounded-full ${
-                      priority === 'high' ? 'bg-red-500' : priority === 'medium' ? 'bg-yellow-500' : 'bg-blue-500'
-                    }`} />
-                    <div className="flex-1">
-                      <h4 className="font-medium text-gray-900">{title}</h4>
-                      <p className="text-sm text-gray-500 line-clamp-1">{description || 'No description'}</p>
-                      <div className="flex items-center gap-2 mt-2 text-xs text-gray-500">
-                        <div className="w-5 h-5 rounded-full bg-orange-500 flex items-center justify-center text-[8px] text-white font-medium">
-                          {selectedUser ? getInitials(selectedUser.name) : '?'}
-                        </div>
-                        <span>{selectedUser?.name || 'Select assignee'}</span>
-                        <span>•</span>
-                        {dueDate ? (
-                          <span className="flex items-center gap-1">
-                            <CalendarIcon className="w-3 h-3" />
-                            Due: {new Date(dueDate).toLocaleString('en-US', {
-                              month: 'short',
-                              day: 'numeric',
-                              hour: 'numeric',
-                              minute: '2-digit',
-                              hour12: true
-                            })}
-                          </span>
+                    {/* Dropdown */}
+                    {isAssigneeDropdownOpen && (
+                      <div className="absolute z-20 w-full mt-1 bg-white border border-gray-200 rounded-md shadow-lg max-h-48 overflow-y-auto">
+                        {assigneeSearch && filteredUsers.length === 0 ? (
+                          <div className="px-3 py-2 text-sm text-gray-500">
+                            No users found
+                          </div>
                         ) : (
-                          <span>Est. {estimatedTime}</span>
+                          (assigneeSearch ? filteredUsers : users || []).map((u: User) => (
+                            <button
+                              key={u.id}
+                              type="button"
+                              onClick={() => handleSelectAssignee(u)}
+                              className={`w-full flex items-center gap-2 px-3 py-2 text-left hover:bg-gray-50 transition-colors ${
+                                assigneeId === u.id ? 'bg-orange-50' : ''
+                              }`}
+                            >
+                              <div
+                                className={`w-6 h-6 rounded-full flex items-center justify-center text-[10px] font-medium ${
+                                  assigneeId === u.id
+                                    ? 'bg-orange-500 text-white'
+                                    : 'bg-gray-200 text-gray-600'
+                                }`}
+                              >
+                                {getInitials(u.name)}
+                              </div>
+                              <div className="flex-1 min-w-0">
+                                <p className="text-sm text-gray-900 truncate">
+                                  {assigneeSearch ? (
+                                    <HighlightMatch text={u.name} query={assigneeSearch} />
+                                  ) : (
+                                    u.name
+                                  )}
+                                  {u.id === user?.id && (
+                                    <span className="ml-1 text-xs text-gray-400">(you)</span>
+                                  )}
+                                </p>
+                              </div>
+                              {assigneeId === u.id && <CheckIcon className="w-4 h-4 text-orange-500" />}
+                            </button>
+                          ))
                         )}
                       </div>
-                    </div>
-                  </div>
+                    )}
+                  </>
+                )}
+              </div>
+
+              {/* Priority */}
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">Priority</label>
+                <div className="flex gap-1">
+                  {[
+                    { value: 'low', label: 'Low', color: 'bg-blue-500' },
+                    { value: 'medium', label: 'Med', color: 'bg-yellow-500' },
+                    { value: 'high', label: 'High', color: 'bg-red-500' },
+                  ].map((p) => (
+                    <button
+                      key={p.value}
+                      type="button"
+                      onClick={() => setPriority(p.value as 'low' | 'medium' | 'high')}
+                      className={`flex-1 flex items-center justify-center gap-1.5 py-2 px-2 rounded-md border text-sm font-medium transition-all ${
+                        priority === p.value
+                          ? 'border-gray-900 bg-gray-900 text-white'
+                          : 'border-gray-300 bg-white text-gray-700 hover:bg-gray-50'
+                      }`}
+                    >
+                      <span className={`w-2 h-2 rounded-full ${p.color}`} />
+                      {p.label}
+                    </button>
+                  ))}
                 </div>
-              )}
+              </div>
+
+              {/* Due Date */}
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">
+                  Due Date
+                </label>
+                <input
+                  type="datetime-local"
+                  value={dueDate}
+                  onChange={(e) => setDueDate(e.target.value)}
+                  className="w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:ring-2 focus:ring-orange-500 focus:border-orange-500 text-sm"
+                />
+              </div>
             </div>
 
             {/* Actions */}
-            <div className="flex items-center justify-between mt-6 pt-4 border-t border-gray-100">
+            <div className="flex items-center justify-end gap-3 pt-4 border-t border-gray-200">
               <button
                 type="button"
                 onClick={onClose}
-                className="px-4 py-2 text-gray-600 hover:text-gray-800 font-medium transition-colors"
+                className="px-4 py-2 text-sm font-medium text-gray-700 bg-white border border-gray-300 rounded-md hover:bg-gray-50 transition-colors"
               >
                 Cancel
               </button>
               <button
                 type="submit"
                 disabled={createTodo.isPending || !title || !description || !assigneeId}
-                className="px-6 py-2.5 bg-orange-500 text-white rounded-xl hover:bg-orange-600 transition-colors font-medium disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-2"
+                className="px-4 py-2 text-sm font-medium text-white bg-orange-500 rounded-md hover:bg-orange-600 disabled:opacity-50 disabled:cursor-not-allowed transition-colors flex items-center gap-2"
               >
                 {createTodo.isPending ? (
                   <>
@@ -383,10 +374,7 @@ export function AddTaskModal({ isOpen, onClose }: AddTaskModalProps) {
                     Creating...
                   </>
                 ) : (
-                  <>
-                    <PlusIcon className="w-4 h-4" />
-                    Add Task
-                  </>
+                  'Create Task'
                 )}
               </button>
             </div>
@@ -398,14 +386,6 @@ export function AddTaskModal({ isOpen, onClose }: AddTaskModalProps) {
 }
 
 // Icon Components
-function TaskIcon({ className = 'w-5 h-5' }: { className?: string }) {
-  return (
-    <svg className={className} fill="none" stroke="currentColor" viewBox="0 0 24 24">
-      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2m-6 9l2 2 4-4" />
-    </svg>
-  );
-}
-
 function CloseIcon({ className = 'w-5 h-5' }: { className?: string }) {
   return (
     <svg className={className} fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -414,18 +394,10 @@ function CloseIcon({ className = 'w-5 h-5' }: { className?: string }) {
   );
 }
 
-function CheckCircleIcon({ className = 'w-5 h-5' }: { className?: string }) {
-  return (
-    <svg className={className} fill="currentColor" viewBox="0 0 24 24">
-      <path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm-2 15l-5-5 1.41-1.41L10 14.17l7.59-7.59L19 8l-9 9z" />
-    </svg>
-  );
-}
-
-function PlusIcon({ className = 'w-5 h-5' }: { className?: string }) {
+function CheckIcon({ className = 'w-5 h-5' }: { className?: string }) {
   return (
     <svg className={className} fill="none" stroke="currentColor" viewBox="0 0 24 24">
-      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" />
+      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
     </svg>
   );
 }
@@ -434,15 +406,46 @@ function LoadingSpinner({ className = 'w-5 h-5' }: { className?: string }) {
   return (
     <svg className={`${className} animate-spin`} fill="none" viewBox="0 0 24 24">
       <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
-      <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z" />
+      <path
+        className="opacity-75"
+        fill="currentColor"
+        d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"
+      />
     </svg>
   );
 }
 
-function CalendarIcon({ className = 'w-5 h-5' }: { className?: string }) {
+function SearchIcon({ className = 'w-5 h-5' }: { className?: string }) {
   return (
     <svg className={className} fill="none" stroke="currentColor" viewBox="0 0 24 24">
-      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z" />
+      <path
+        strokeLinecap="round"
+        strokeLinejoin="round"
+        strokeWidth={2}
+        d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z"
+      />
     </svg>
+  );
+}
+
+// Highlight matching text in search results
+function HighlightMatch({ text, query }: { text: string; query: string }) {
+  if (!query.trim()) return <>{text}</>;
+
+  const regex = new RegExp(`(${query.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')})`, 'gi');
+  const parts = text.split(regex);
+
+  return (
+    <>
+      {parts.map((part, i) =>
+        regex.test(part) ? (
+          <span key={i} className="bg-yellow-200 text-yellow-900">
+            {part}
+          </span>
+        ) : (
+          <span key={i}>{part}</span>
+        )
+      )}
+    </>
   );
 }

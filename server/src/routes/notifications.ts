@@ -1,5 +1,5 @@
 import { Router, Request, Response } from 'express';
-import db from '../db';
+import { query } from '../db';
 import { authenticateToken } from '../middleware/auth';
 import type { Notification } from '../types';
 
@@ -8,19 +8,22 @@ const router = Router();
 // All routes require authentication
 router.use(authenticateToken);
 
-// Get user's notifications
-router.get('/', (req: Request, res: Response): void => {
-  try {
-    const notifications = db.prepare(`
-      SELECT * FROM notifications
-      WHERE userId = ?
-      ORDER BY createdAt DESC
-      LIMIT 50
-    `).all(req.user!.userId) as any[];
+// Helper to check if value is truthy (handles PostgreSQL bigint as string)
+const isTruthy = (val: any) => val == 1 || val === '1' || val === true;
 
-    const formattedNotifications: Notification[] = notifications.map(n => ({
+// Get user's notifications
+router.get('/', async (req: Request, res: Response): Promise<void> => {
+  try {
+    const result = await query(`
+      SELECT * FROM notifications
+      WHERE userid = $1
+      ORDER BY createdat DESC
+      LIMIT 50
+    `, [req.user!.userId]);
+
+    const formattedNotifications: Notification[] = result.rows.map((n: any) => ({
       ...n,
-      isRead: Boolean(n.isRead),
+      isread: isTruthy(n.isread),
     }));
 
     res.json(formattedNotifications);
@@ -31,28 +34,28 @@ router.get('/', (req: Request, res: Response): void => {
 });
 
 // Get unread count
-router.get('/unread-count', (req: Request, res: Response): void => {
+router.get('/unread-count', async (req: Request, res: Response): Promise<void> => {
   try {
-    const result = db.prepare(`
+    const result = await query<{ count: string }>(`
       SELECT COUNT(*) as count FROM notifications
-      WHERE userId = ? AND isRead = 0
-    `).get(req.user!.userId) as { count: number };
+      WHERE userid = $1 AND isread = 0
+    `, [req.user!.userId]);
 
-    res.json({ count: result.count });
+    res.json({ count: parseInt(result.rows[0].count) });
   } catch (error) {
     res.status(500).json({ error: 'Failed to get unread count' });
   }
 });
 
 // Mark notification as read
-router.put('/:id/read', (req: Request, res: Response): void => {
+router.put('/:id/read', async (req: Request, res: Response): Promise<void> => {
   try {
-    const result = db.prepare(`
-      UPDATE notifications SET isRead = 1
-      WHERE id = ? AND userId = ?
-    `).run(req.params.id, req.user!.userId);
+    const result = await query(`
+      UPDATE notifications SET isread = 1
+      WHERE id = $1 AND userid = $2
+    `, [req.params.id, req.user!.userId]);
 
-    if (result.changes === 0) {
+    if (result.rowCount === 0) {
       res.status(404).json({ error: 'Notification not found' });
       return;
     }
@@ -64,12 +67,12 @@ router.put('/:id/read', (req: Request, res: Response): void => {
 });
 
 // Mark all as read
-router.put('/read-all', (req: Request, res: Response): void => {
+router.put('/read-all', async (req: Request, res: Response): Promise<void> => {
   try {
-    db.prepare(`
-      UPDATE notifications SET isRead = 1
-      WHERE userId = ?
-    `).run(req.user!.userId);
+    await query(`
+      UPDATE notifications SET isread = 1
+      WHERE userid = $1
+    `, [req.user!.userId]);
 
     res.json({ success: true });
   } catch (error) {
@@ -78,13 +81,13 @@ router.put('/read-all', (req: Request, res: Response): void => {
 });
 
 // Delete notification
-router.delete('/:id', (req: Request, res: Response): void => {
+router.delete('/:id', async (req: Request, res: Response): Promise<void> => {
   try {
-    const result = db.prepare(`
-      DELETE FROM notifications WHERE id = ? AND userId = ?
-    `).run(req.params.id, req.user!.userId);
+    const result = await query(`
+      DELETE FROM notifications WHERE id = $1 AND userid = $2
+    `, [req.params.id, req.user!.userId]);
 
-    if (result.changes === 0) {
+    if (result.rowCount === 0) {
       res.status(404).json({ error: 'Notification not found' });
       return;
     }
@@ -96,18 +99,18 @@ router.delete('/:id', (req: Request, res: Response): void => {
 });
 
 // Helper function to create notification (exported for use in other routes)
-export function createNotification(
+export async function createNotification(
   userId: number,
   type: Notification['type'],
   title: string,
   message: string,
   relatedId?: number
-): void {
+): Promise<void> {
   try {
-    db.prepare(`
-      INSERT INTO notifications (userId, type, title, message, relatedId)
-      VALUES (?, ?, ?, ?, ?)
-    `).run(userId, type, title, message, relatedId || null);
+    await query(`
+      INSERT INTO notifications (userid, type, title, message, relatedid)
+      VALUES ($1, $2, $3, $4, $5)
+    `, [userId, type, title, message, relatedId || null]);
   } catch (error) {
     console.error('Failed to create notification:', error);
   }
